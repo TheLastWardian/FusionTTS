@@ -10,6 +10,7 @@ __pycache__/
 # Runtime (no versionar estado de uso)
 chatrooms/
 settings.json
+tts_e2e_results/
 
 # Temporales
 *.tmp
