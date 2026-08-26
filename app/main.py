@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app import paths
 from app.config import ConfigStore
 from app.personas import PersonaStore
+from app.routers import chat as chat_router
 from app.routers import config as config_router
 from app.routers import personas as personas_router
 from app.routers import rooms as rooms_router
@@ -37,6 +38,7 @@ async def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
+app.include_router(chat_router.router, prefix="/api")
 app.include_router(config_router.router, prefix="/api")
 app.include_router(sessions_router.router, prefix="/api")
 app.include_router(personas_router.router, prefix="/api")

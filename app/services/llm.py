@@ -38,23 +38,25 @@ class LLMClient:
     def _base_url(self) -> str:
         return str(self._config.get("llm_base_url")).rstrip("/")
 
-    def _build_body(self, messages: list[dict], stream: bool) -> dict:
+    def _build_body(self, messages: list[dict], stream: bool, max_tokens: int | None = None) -> dict:
         body: dict = {
             "messages": messages,
             "stream": stream,
             "temperature": self._config.get("llm_temperature"),
             "top_p": self._config.get("llm_top_p"),
-            "max_tokens": self._config.get("llm_max_tokens"),
+            "max_tokens": (
+                max_tokens if max_tokens is not None else self._config.get("llm_max_tokens")
+            ),
         }
         model = self._config.get("llm_model")
         if model:
             body["model"] = model
         return body
 
-    async def chat(self, messages: list[dict]) -> str:
+    async def chat(self, messages: list[dict], max_tokens: int | None = None) -> str:
         url = self._base_url() + "/v1/chat/completions"
         try:
-            resp = await self._client.post(url, json=self._build_body(messages, stream=False))
+            resp = await self._client.post(url, json=self._build_body(messages, stream=False, max_tokens=max_tokens))
             resp.raise_for_status()
             data = resp.json()
             return data["choices"][0]["message"]["content"]

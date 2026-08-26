@@ -34,3 +34,12 @@ class Room(BaseModel):
     name: str
     persona_names: list[str]
     echo_chamber: bool
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1)
+    who_answers: str = "router"
+    chat_room: str = "default"
+    message_id: str | None = None
+    image_base64: str | None = None
+    image_mime: str | None = None

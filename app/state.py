@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from typing import Any
 
@@ -19,6 +20,7 @@ class AppState:
         self.asr_manager: Any = None
         self._room_stores: dict[str, RoomStore] = {}
         self._room_stores_lock = threading.Lock()
+        self.cancel_event = asyncio.Event()
 
     def get_room_store(self, room_name: str) -> RoomStore:
         with self._room_stores_lock:
