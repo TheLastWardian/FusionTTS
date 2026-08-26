@@ -6,7 +6,7 @@ Chat multi-persona con TTS OmniVoice bajo demanda. "Recreación" de TalkWithMe c
 
 - [x] Plan de diseño (`FUSIONTTS_PLAN.md`)
 - [x] Plan de implementación (`IMPLEMENTATION_PLAN.md`)
-- [ ] T0: git + esqueleto
+- [x] T0: git + esqueleto
 - [ ] T1–T20: ver `IMPLEMENTATION_PLAN.md`
 
 ## Requisitos (resumen — detalle en el README final, task-19)
