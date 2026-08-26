@@ -11,6 +11,7 @@ from app.routers import config as config_router
 from app.routers import personas as personas_router
 from app.routers import rooms as rooms_router
 from app.routers import sessions as sessions_router
+from app.routers import tts as tts_router
 from app.rooms import RoomConfigStore
 from app.schemas import HealthResponse
 from app.services.llm import LLMClient
@@ -54,4 +55,5 @@ app.include_router(config_router.router, prefix="/api")
 app.include_router(sessions_router.router, prefix="/api")
 app.include_router(personas_router.router, prefix="/api")
 app.include_router(rooms_router.router, prefix="/api")
+app.include_router(tts_router.router, prefix="/api/tts")
 app.mount("/", StaticFiles(directory=paths.STATIC_DIR, html=True), name="static")

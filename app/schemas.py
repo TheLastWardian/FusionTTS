@@ -36,6 +36,11 @@ class Room(BaseModel):
     echo_chamber: bool
 
 
+class SpeakRequest(BaseModel):
+    text: str = Field(min_length=1)
+    persona: str | None = None
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     who_answers: str = "router"

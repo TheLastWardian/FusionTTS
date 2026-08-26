@@ -162,6 +162,15 @@ class TTSDispatcher:
     def audio_empty(self) -> bool:
         return self._audio_q.empty()
 
+    def is_stopped(self) -> bool:
+        return self._stopped
+
+    def is_paused(self) -> bool:
+        return not self._pause_event.is_set()
+
+    def resolve_persona(self, name: str) -> tuple[str, str, str | None]:
+        return self._persona_audio(name)
+
     def _persona_audio(self, name: str) -> tuple[str, str, str | None]:
         cached = self._persona_cache.get(name)
         if cached is not None:
