@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app import paths
 from app.config import ConfigStore
 from app.routers import config as config_router
+from app.routers import sessions as sessions_router
 from app.schemas import HealthResponse
 from app.state import AppState
 
@@ -25,4 +26,5 @@ async def health() -> HealthResponse:
 
 
 app.include_router(config_router.router, prefix="/api")
+app.include_router(sessions_router.router, prefix="/api")
 app.mount("/", StaticFiles(directory=paths.STATIC_DIR, html=True), name="static")

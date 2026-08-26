@@ -1,0 +1,192 @@
+import json
+import threading
+import uuid
+from datetime import datetime, timezone
+
+import pytest
+
+from app.config import ConfigStore
+from app.persistence import RoomStore, new_message
+
+
+@pytest.fixture
+def config(tmp_path):
+    return ConfigStore(settings_path=tmp_path / "settings.json")
+
+
+@pytest.fixture
+def store(config, tmp_path):
+    return RoomStore("test-room", config, root=tmp_path / "chatrooms")
+
+
+def msg(role="user", sender="user", text="hola", **overrides):
+    message = new_message(role, sender, text)
+    message.update(overrides)
+    return message
+
+
+def test_round_trip_history_unicode_and_emoji(store, config, tmp_path):
+    m1 = msg("user", "user", "hola, ¿cómo estás? 😊")
+    m2 = msg("assistant", "Jean", "¡Hola! ¿Qué tal? 🎉")
+    m3 = msg(
+        "user",
+        "user",
+        "tú bien? ñandú ñoño",
+        uuid="u3",
+        audio=["u3_0.wav"],
+        image="images/u3.png",
+    )
+    store.append(m1)
+    store.append(m2)
+    store.append(m3)
+
+    raw = store.history_path.read_text(encoding="utf-8")
+    assert "hola, ¿cómo estás? 😊" in raw
+    assert "\\u" not in raw
+
+    reloaded = RoomStore("test-room", config, root=tmp_path / "chatrooms")
+    reloaded.load()
+    assert reloaded.history == [m1, m2, m3]
+
+
+def test_message_schema_fields():
+    m = new_message("assistant", "Fischl", "hola")
+    assert set(m) == {"uuid", "role", "sender", "text", "audio", "image", "ts"}
+    uuid.UUID(m["uuid"])
+    datetime.fromisoformat(m["ts"])
+    assert m["audio"] == []
+    assert m["image"] is None
+
+
+def test_append_no_file_when_save_history_off(store, config):
+    config.set("save_history", False)
+    store.append(msg())
+    assert len(store.history) == 1
+    assert not store.history_path.exists()
+
+
+def test_save_wav_disabled(store, config):
+    config.set("save_audio", False)
+    assert store.save_wav("abc", 0, b"RIFF-data") is None
+    assert not (store.dir / "abc_0.wav").exists()
+
+
+def test_save_wav_enabled(store):
+    name = store.save_wav("abc-123", 0, b"RIFF-data")
+    assert name == "abc-123_0.wav"
+    assert (store.dir / name).read_bytes() == b"RIFF-data"
+
+
+def test_save_wav_creates_dir_on_demand(config, tmp_path):
+    store = RoomStore("fresh", config, root=tmp_path / "chatrooms")
+    name = store.save_wav("u1", 2, b"data")
+    assert name == "u1_2.wav"
+    assert (store.dir / name).is_file()
+
+
+def test_save_image_creates_file(store):
+    rel = store.save_image(b"\x89PNG-data", ".png")
+    assert rel.startswith("images/")
+    assert rel.endswith(".png")
+    assert (store.dir / rel).read_bytes() == b"\x89PNG-data"
+
+
+def test_save_image_disabled_when_save_history_off(store, config):
+    config.set("save_history", False)
+    assert store.save_image(b"x", ".png") is None
+    assert not (store.dir / "images").exists()
+
+
+def test_save_image_ext_sanitized_no_escape(store):
+    rel = store.save_image(b"x", ".png/../x")
+    assert ".." not in rel
+    assert "/../" not in rel
+    assert rel.endswith(".png")
+    assert (store.dir / rel).is_file()
+
+
+def test_save_image_ext_default_when_unreadable(store):
+    rel = store.save_image(b"x", "...")
+    assert rel.endswith(".png")
+    assert (store.dir / rel).is_file()
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["", "../evil", "a/b", "a\\b", "bad!name", "a..b", "café", None, 42],
+)
+def test_room_name_rejected(name, config, tmp_path):
+    with pytest.raises(ValueError):
+        RoomStore(name, config, root=tmp_path / "chatrooms")
+
+
+def test_load_missing_file_empty(store):
+    assert store.load() == []
+    assert not store.history_path.exists()
+
+
+def test_load_corrupt_json_empty(config, tmp_path):
+    root = tmp_path / "chatrooms"
+    room_dir = root / "broken"
+    room_dir.mkdir(parents=True)
+    (room_dir / "history.json").write_text("{not valid json", encoding="utf-8")
+    store = RoomStore("broken", config, root=root)
+    assert store.load() == []
+
+
+def test_load_non_list_json_empty(config, tmp_path):
+    root = tmp_path / "chatrooms"
+    room_dir = root / "weird"
+    room_dir.mkdir(parents=True)
+    (room_dir / "history.json").write_text('{"a": 1}', encoding="utf-8")
+    store = RoomStore("weird", config, root=root)
+    assert store.load() == []
+
+
+def test_load_flag_off_keeps_empty(config, tmp_path):
+    root = tmp_path / "chatrooms"
+    room_dir = root / "old"
+    room_dir.mkdir(parents=True)
+    (room_dir / "history.json").write_text(
+        json.dumps([new_message("user", "user", "antes")]), encoding="utf-8"
+    )
+    config.set("save_history", False)
+    store = RoomStore("old", config, root=root)
+    assert store.load() == []
+
+
+def test_concurrent_appends(store, config):
+    barrier = threading.Barrier(4)
+
+    def worker(tid):
+        barrier.wait()
+        for i in range(25):
+            store.append(new_message("user", "user", f"t{tid}-{i}"))
+
+    threads = [threading.Thread(target=worker, args=(t,)) for t in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(store.history) == 100
+    data = json.loads(store.history_path.read_text(encoding="utf-8"))
+    assert len(data) == 100
+    assert len({m["uuid"] for m in data}) == 100
+
+
+def test_no_tmp_leftovers(store):
+    store.append(msg())
+    store.save_wav("u1", 0, b"data")
+    store.save_image(b"x")
+    assert not list(store.dir.glob("*.tmp"))
+
+
+def test_delete_removes_directory(store):
+    store.append(msg())
+    store.save_wav("u1", 0, b"data")
+    store.save_image(b"x")
+    assert store.dir.exists()
+    store.delete()
+    assert not store.dir.exists()
+    store.delete()
