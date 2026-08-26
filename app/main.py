@@ -14,6 +14,7 @@ from app.routers import sessions as sessions_router
 from app.rooms import RoomConfigStore
 from app.schemas import HealthResponse
 from app.services.llm import LLMClient
+from app.services.tts.registry import create_engine
 from app.state import AppState
 
 
@@ -22,12 +23,14 @@ async def lifespan(app: FastAPI):
     config = ConfigStore()
     state = AppState(config)
     state.llm = LLMClient(config)
+    state.tts_engine = create_engine(config.get("tts_engine"), config)
     state.rooms = RoomConfigStore(config)
     state.personas = PersonaStore(rooms=state.rooms)
     state.rooms.personas = state.personas
     app.state.app_state = state
     yield
     await state.llm.close()
+    await state.tts_engine.close()
 
 
 app = FastAPI(title="FusionTTS", lifespan=lifespan)

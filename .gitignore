@@ -14,6 +14,7 @@ settings.json
 # Temporales
 *.tmp
 .tts_cancel.signal
+*.log
 
 # IDE
 .vscode/
