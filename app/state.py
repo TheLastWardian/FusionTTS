@@ -3,11 +3,13 @@ from typing import Any
 
 from app.config import ConfigStore
 from app.persistence import RoomStore
+from app.services.llm import LLMClient
 
 
 class AppState:
     def __init__(self, config: ConfigStore) -> None:
         self.config: ConfigStore = config
+        self.llm: LLMClient | None = None
         self.tts_engine: Any = None
         self.dispatcher: Any = None
         self.asr_manager: Any = None

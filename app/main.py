@@ -8,13 +8,18 @@ from app.config import ConfigStore
 from app.routers import config as config_router
 from app.routers import sessions as sessions_router
 from app.schemas import HealthResponse
+from app.services.llm import LLMClient
 from app.state import AppState
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.app_state = AppState(ConfigStore())
+    config = ConfigStore()
+    state = AppState(config)
+    state.llm = LLMClient(config)
+    app.state.app_state = state
     yield
+    await state.llm.close()
 
 
 app = FastAPI(title="FusionTTS", lifespan=lifespan)
