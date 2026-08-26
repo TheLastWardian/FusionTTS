@@ -10,6 +10,9 @@ from app.persistence import RoomStore, new_message
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "SETTINGS_PATH", tmp_path / "settings.json")
     monkeypatch.setattr(paths, "CHATROOMS_DIR", tmp_path / "chatrooms")
+    monkeypatch.setattr(paths, "CHATROOMS_YAML", tmp_path / "chatrooms.yaml")
+    monkeypatch.setattr(paths, "PERSONAS_YAML", tmp_path / "personas.yaml")
+    monkeypatch.setattr(paths, "PERSONAS_AUDIO_DIR", tmp_path / "personas_audio")
     with TestClient(app) as c:
         yield c
 
