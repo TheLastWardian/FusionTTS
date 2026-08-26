@@ -1,5 +1,5 @@
 {
-  "_comment": "Plantilla de configuracion. Copiar a settings.json y editar. La task-2 completa los defaults en config.py; este archivo solo documenta las keys.",
+  "_comment": "Plantilla de settings.json: copiar a settings.json (se auto-crea con estos defaults si no existe). Los defaults autoritativos y la validacion viven en app/config.py.",
   "llm_base_url": "http://localhost:8080",
   "llm_model": "",
   "llm_temperature": 1.0,
