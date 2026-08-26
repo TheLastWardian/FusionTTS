@@ -14,6 +14,7 @@ from app.routers import sessions as sessions_router
 from app.rooms import RoomConfigStore
 from app.schemas import HealthResponse
 from app.services.llm import LLMClient
+from app.services.tts.dispatcher import TTSDispatcher
 from app.services.tts.registry import create_engine
 from app.state import AppState
 
@@ -26,10 +27,17 @@ async def lifespan(app: FastAPI):
     state.tts_engine = create_engine(config.get("tts_engine"), config)
     state.rooms = RoomConfigStore(config)
     state.personas = PersonaStore(rooms=state.rooms)
+    state.dispatcher = TTSDispatcher(
+        engine=state.tts_engine,
+        personas=state.personas,
+        config=config,
+    )
+    await state.dispatcher.start()
     state.rooms.personas = state.personas
     app.state.app_state = state
     yield
     await state.llm.close()
+    await state.dispatcher.shutdown()
     await state.tts_engine.close()
 
 

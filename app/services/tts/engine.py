@@ -47,5 +47,6 @@ class TTSEngine(Protocol):
         audio_base64: str = "",
         prompt_text: str = "",
         *,
+        language: str | None = None,
         abort_event: asyncio.Event | None = None,
     ) -> TTSResult: ...

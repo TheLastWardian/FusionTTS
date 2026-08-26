@@ -224,6 +224,7 @@ class OmniVoiceEngine:
         audio_base64: str = "",
         prompt_text: str = "",
         *,
+        language: str | None = None,
         abort_event: asyncio.Event | None = None,
     ) -> TTSResult:
         if abort_event is not None and abort_event.is_set():
@@ -234,7 +235,7 @@ class OmniVoiceEngine:
             "text": text,
             "audio_base64": audio_base64,
             "prompt_text": prompt_text,
-            "language": cfg.get("tts_language"),
+            "language": language if language is not None else cfg.get("tts_language"),
             "num_steps": cfg.get("tts_num_steps"),
             "guidance_scale": cfg.get("tts_guidance_scale"),
             "seed": cfg.get("tts_seed"),

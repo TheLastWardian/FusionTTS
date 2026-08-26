@@ -1,0 +1,200 @@
+import asyncio
+import base64
+import logging
+from dataclasses import dataclass
+
+from app import paths
+from app.config import ConfigStore
+from app.personas import PersonaStore
+from app.services.tts.engine import TTSEngine, TTSError
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TTSChunk:
+    sentence_id: int
+    message_id: str
+    persona: str
+    audio: bytes
+    sample_rate: int
+
+
+class TTSDispatcher:
+    def __init__(
+        self,
+        engine: TTSEngine,
+        personas: PersonaStore,
+        config: ConfigStore,
+        work_queue_max: int = 8,
+        audio_queue_max: int = 32,
+    ) -> None:
+        self._engine = engine
+        self._personas = personas
+        self._config = config
+        self._work_q: asyncio.Queue = asyncio.Queue(maxsize=work_queue_max)
+        self._audio_q: asyncio.Queue = asyncio.Queue(maxsize=audio_queue_max)
+        self._worker_task: asyncio.Task | None = None
+        self._pause_event = asyncio.Event()
+        self._pause_event.set()
+        self._stopped = False
+        self._shutting_down = False
+        self._inflight_task: asyncio.Task | None = None
+        self._in_flight = False
+        self._sentence_counter = -1
+        self._persona_cache: dict[str, tuple[str, str, str | None]] = {}
+
+    async def start(self) -> None:
+        if self._worker_task is not None and not self._worker_task.done():
+            return
+        self._worker_task = asyncio.create_task(self._worker())
+
+    async def _worker(self) -> None:
+        logger.info("tts dispatcher worker arrancado")
+        while not self._shutting_down:
+            await self._pause_event.wait()
+            if self._shutting_down:
+                break
+            item = await self._work_q.get()
+            if item is None:
+                continue
+            if self._stopped:
+                continue
+            await self._process(item)
+
+    async def shutdown(self) -> None:
+        self._shutting_down = True
+        self._pause_event.set()
+        if self._inflight_task is not None and not self._inflight_task.done():
+            self._inflight_task.cancel()
+        try:
+            self._work_q.put_nowait(None)
+        except asyncio.QueueFull:
+            pass
+        try:
+            if self._worker_task is not None:
+                self._worker_task.cancel()
+                try:
+                    await self._worker_task
+                except asyncio.CancelledError:
+                    pass
+        finally:
+            self._worker_task = None
+        while True:
+            try:
+                self._work_q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        logger.info("tts dispatcher shutdown")
+
+    async def enqueue(self, sentence: str, message_id: str, persona: str) -> None:
+        if self._stopped or self._shutting_down:
+            return
+        if self._worker_task is None:
+            raise TTSError("dispatcher sin worker")
+        self._sentence_counter += 1
+        await self._work_q.put((self._sentence_counter, sentence, message_id, persona))
+
+    async def _process(self, item: tuple[int, str, str, str]) -> None:
+        sentence_id, sentence, message_id, persona = item
+        audio_b64, transcript, language = self._persona_audio(persona)
+        self._in_flight = True
+        self._inflight_task = asyncio.create_task(
+            self._engine.synthesize(sentence, audio_b64, transcript, language=language)
+        )
+        try:
+            result = await self._inflight_task
+        except asyncio.CancelledError:
+            return
+        except TTSError as exc:
+            logger.warning("tts sentence %s fallida: %s", sentence_id, exc)
+            return
+        finally:
+            self._in_flight = False
+            self._inflight_task = None
+        await self._audio_q.put(
+            TTSChunk(sentence_id, message_id, persona, result.audio, result.sample_rate)
+        )
+
+    async def pause(self) -> None:
+        self._pause_event.clear()
+        if self._inflight_task is not None and not self._inflight_task.done():
+            self._inflight_task.cancel()
+
+    async def resume(self) -> None:
+        self._pause_event.set()
+
+    async def stop(self) -> None:
+        self._stopped = True
+        self._pause_event.set()
+        if self._inflight_task is not None and not self._inflight_task.done():
+            self._inflight_task.cancel()
+        while True:
+            try:
+                self._work_q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        try:
+            self._work_q.put_nowait(None)
+        except asyncio.QueueFull:
+            pass
+        while True:
+            try:
+                self._audio_q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+    def reset(self) -> None:
+        self._stopped = False
+
+    def is_idle(self) -> bool:
+        return self._work_q.empty() and not self._in_flight
+
+    async def wait_until_done(self) -> None:
+        while not self._shutting_down:
+            if self.is_idle():
+                return
+            await asyncio.sleep(0.05)
+
+    async def wait_audio(self) -> TTSChunk:
+        return await self._audio_q.get()
+
+    def audio_empty(self) -> bool:
+        return self._audio_q.empty()
+
+    def _persona_audio(self, name: str) -> tuple[str, str, str | None]:
+        cached = self._persona_cache.get(name)
+        if cached is not None:
+            return cached
+        persona = self._personas.get(name)
+        ref_audio = persona.get("reference_audio") if persona is not None else None
+        if persona is None or not ref_audio:
+            logger.warning("persona %s sin audio de referencia; usando voz auto", name)
+            result: tuple[str, str, str | None] = ("", "", None)
+        else:
+            try:
+                wav_path = paths.BASE_DIR / str(ref_audio)
+                audio_b64 = base64.b64encode(wav_path.read_bytes()).decode()
+                transcript = ""
+                ref_transcript = persona.get("reference_audio_transcript")
+                if ref_transcript:
+                    transcript = (
+                        paths.BASE_DIR / str(ref_transcript)
+                    ).read_text(encoding="utf-8").strip()
+                language = persona.get("reference_audio_language") or None
+                result = (audio_b64, transcript, language)
+            except (OSError, KeyError) as exc:
+                logger.warning(
+                    "persona %s: fallo leyendo audio de referencia (%s); voz auto",
+                    name,
+                    exc,
+                )
+                result = ("", "", None)
+        self._persona_cache[name] = result
+        return result
+
+    def invalidate_persona(self, name: str) -> None:
+        self._persona_cache.pop(name, None)
+
+    def invalidate_personas(self) -> None:
+        self._persona_cache.clear()

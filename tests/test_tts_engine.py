@@ -341,3 +341,16 @@ async def test_15_spawn_port_occupied(make_engine):
     finally:
         listener.close()
     assert engine._proc is None or engine._proc.poll() is not None
+
+
+async def test_16_language_override(make_engine):
+    engine, config = make_engine()
+    config.set("tts_language", "es")
+    await engine.start()
+    await engine.synthesize("hola", language="en")
+    port = config.get("tts_server_port")
+    calls = (await _get(port, "/calls"))["calls"]
+    assert calls[-1]["language"] == "en"
+    await engine.synthesize("hola")
+    calls = (await _get(port, "/calls"))["calls"]
+    assert calls[-1]["language"] == "es"
