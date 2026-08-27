@@ -27,7 +27,7 @@ import numpy as np
 import soundfile as sf
 
 BASE = Path(__file__).resolve().parent
-RESULTS_DIR = BASE / "tts_e2e_results"
+RESULTS_DIR = BASE / "tts_e2e_results" / f"run_{dt.datetime.now():%Y%m%d_%H%M%S}"
 APP_LOG = RESULTS_DIR / "app.log"
 RESULT_JSON = RESULTS_DIR / "result.json"
 RESULT_LOG = RESULTS_DIR / "result.log"
@@ -455,6 +455,7 @@ def main() -> int:
     log("=" * 72)
     log("T11 - Verificacion e2e TTS en hardware")
     log(f"Hora: {started.isoformat(timespec='seconds')}  Puerto: {args.port}")
+    log(f"Carpeta de corrida: {RESULTS_DIR}")
     log("Control: Enter = siguiente paso | s = saltar | q = salir (limpia al salir)")
     log("Precondicion: LLM liviano cargado en LM Studio (:8080) para los pasos de chat")
     log("=" * 72)
