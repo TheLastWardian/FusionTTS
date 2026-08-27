@@ -1,6 +1,7 @@
-// rooms.js — lista de rooms en la sidebar, switching y creación de room nuevo.
+// rooms.js — lista de rooms en la sidebar, switching, echo chamber y creación de room nuevo.
 import { state } from "./state.js";
 import { api, toast } from "./utils.js";
+import { cancelChat } from "./chat.js";
 
 function renderRooms() {
   const list = document.getElementById("room-list");
@@ -12,6 +13,8 @@ function renderRooms() {
     list.appendChild(empty);
   }
   for (const r of state.rooms) {
+    const row = document.createElement("div");
+    row.className = "room-row";
     const b = document.createElement("button");
     b.className = "room-item" + (r.name === state.room ? " active" : "");
     const i = document.createElement("i");
@@ -19,14 +22,48 @@ function renderRooms() {
     const span = document.createElement("span");
     span.textContent = r.name;
     b.append(i, span);
-    b.addEventListener("click", () => {
-      if (r.name === state.room) return;
-      state.room = r.name;
-      renderRooms();
-      document.getElementById("room-label").textContent = state.room;
-      toast("Room: " + r.name, "info");
+    b.addEventListener("click", () => switchRoom(r.name));
+    const echo = document.createElement("button");
+    echo.className = "room-echo" + (r.echo_chamber ? " on" : "");
+    echo.title = "Echo chamber";
+    const ei = document.createElement("i");
+    ei.className = "ti ti-repeat";
+    echo.appendChild(ei);
+    echo.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleEcho(r.name);
     });
-    list.appendChild(b);
+    row.append(b, echo);
+    list.appendChild(row);
+  }
+}
+
+async function switchRoom(name) {
+  if (name === state.room) return;
+  if (state.streaming) await cancelChat();
+  state.room = name;
+  renderRooms();
+  updateLabel();
+  toast("Room: " + name, "info");
+}
+
+async function toggleEcho(name) {
+  const r = state.rooms.find((x) => x.name === name);
+  if (!r) return;
+  try {
+    const updated = await api("/api/rooms/" + encodeURIComponent(name), {
+      method: "PUT",
+      body: {
+        name: r.name,
+        persona_names: r.persona_names,
+        echo_chamber: !r.echo_chamber,
+      },
+    });
+    Object.assign(r, updated);
+    renderRooms();
+    toast("Echo chamber " + (r.echo_chamber ? "ON" : "OFF") + ": " + r.name, "info");
+  } catch (err) {
+    toast(err.message || "Error al cambiar echo chamber", "error");
   }
 }
 

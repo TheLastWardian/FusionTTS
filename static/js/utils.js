@@ -57,6 +57,13 @@ export function debounce(fn, ms) {
   };
 }
 
+const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+export function avatarCss(p) {
+  const color = HEX_COLOR.test(p.avatar_color || "") ? p.avatar_color : "var(--accent)";
+  return `background: color-mix(in srgb, ${color} 18%, var(--bg2)); color: ${color};`;
+}
+
 export function initials(name) {
   return String(name)
     .trim()

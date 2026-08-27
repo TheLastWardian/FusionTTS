@@ -70,7 +70,7 @@
     <div class="messages" id="messages">
       <div class="empty-state">
         <i class="ti ti-messages"></i>
-        <span>El chat llega en el próximo paso (T15)</span>
+        <span>Sin mensajes todavía</span>
       </div>
     </div>
 
@@ -81,9 +81,9 @@
             <span class="input-who-label">Responde:</span>
             <span id="who-chips"></span>
           </div>
-          <textarea class="chat-input" id="chat-input" placeholder="Escribí un mensaje… o adjuntá una imagen" rows="1" disabled title="Disponible en T15"></textarea>
+          <textarea class="chat-input" id="chat-input" placeholder="Escribí un mensaje… (Enter para enviar)" rows="1"></textarea>
         </div>
-        <button class="send-btn" id="btn-send" aria-label="Enviar mensaje" title="Enviar" disabled><i class="ti ti-send"></i></button>
+        <button class="send-btn" id="btn-send" aria-label="Enviar mensaje" title="Enviar"><i class="ti ti-send"></i></button>
       </div>
     </div>
   </main>
@@ -109,6 +109,7 @@
 <div class="drawer-overlay" id="drawer-overlay"></div>
 <div class="toasts" id="toasts"></div>
 <div class="api-banner" id="api-banner">No se pudo conectar al API</div>
+<script src="js/sse.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -1,14 +1,7 @@
 // personas.js — sidebar de personas, panel de detalle y who-chips (display; edición en T17).
 import { state } from "./state.js";
-import { api, initials, toast } from "./utils.js";
+import { api, avatarCss, initials, toast } from "./utils.js";
 import { setRightTab } from "./layout.js";
-
-const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-
-function avatarCss(p) {
-  const color = HEX_COLOR.test(p.avatar_color || "") ? p.avatar_color : "var(--accent)";
-  return `background: color-mix(in srgb, ${color} 18%, var(--bg2)); color: ${color};`;
-}
 
 function renderSidebar() {
   const list = document.getElementById("persona-list");
@@ -152,17 +145,21 @@ function renderEmptyDetail() {
 function renderWhoChips() {
   const wrap = document.getElementById("who-chips");
   wrap.textContent = "";
-  const mk = (label, selected) => {
+  const mk = (label, value) => {
     const b = document.createElement("button");
-    b.className = "who-chip" + (selected ? " sel" : "");
+    b.className = "who-chip" + (value === state.who ? " sel" : "");
     b.textContent = label;
-    b.disabled = true;
-    b.title = "Disponible en T15";
+    b.dataset.value = value;
+    b.addEventListener("click", () => {
+      state.who = value;
+      wrap.querySelectorAll(".who-chip").forEach((c) => c.classList.remove("sel"));
+      b.classList.add("sel");
+    });
     return b;
   };
-  wrap.appendChild(mk("LLM router", true));
-  for (const p of state.personas) wrap.appendChild(mk(p.name, false));
-  wrap.appendChild(mk("Random", false));
+  wrap.appendChild(mk("LLM router", "router"));
+  for (const p of state.personas) wrap.appendChild(mk(p.name, p.name));
+  wrap.appendChild(mk("Random", "random"));
 }
 
 export function selectPersona(name, opts = {}) {
