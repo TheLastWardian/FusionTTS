@@ -142,24 +142,199 @@ function renderEmptyDetail() {
   panel.appendChild(empty);
 }
 
+const WHO_GAP = 5;
+let whoWrap = null;
+let whoChips = [];
+let whoPlus = null;
+let whoHidden = [];
+let whoRo = null;
+let whoModal = null;
+
+function selectWho(value) {
+  state.who = value;
+  for (const c of whoChips) c.classList.toggle("sel", c.dataset.value === value);
+  applyWhoFit();
+}
+
+function measurePlus(n) {
+  whoPlus.textContent = "+" + n;
+  whoPlus.style.display = "";
+  whoPlus.style.visibility = "hidden";
+  const w = whoPlus.offsetWidth;
+  whoPlus.style.display = "none";
+  return w;
+}
+
+function applyWhoFit() {
+  if (!whoWrap || whoChips.length === 0) return;
+  const avail = whoWrap.clientWidth;
+  const widths = whoChips.map((c) => c.offsetWidth);
+  const selIdx = whoChips.findIndex((c) => c.dataset.value === state.who);
+
+  let res = window.FTTS.fitChips(widths, avail, selIdx, WHO_GAP, 0);
+  if (res.hidden.length > 0) {
+    let plusW = measurePlus(res.hidden.length);
+    const n1 = res.hidden.length;
+    res = window.FTTS.fitChips(widths, avail, selIdx, WHO_GAP, plusW);
+    if (String(res.hidden.length).length > String(n1).length) {
+      plusW = measurePlus(res.hidden.length);
+      res = window.FTTS.fitChips(widths, avail, selIdx, WHO_GAP, plusW);
+    }
+  }
+
+  whoHidden = res.hidden;
+  whoChips.forEach((c, i) => {
+    c.style.display = res.visible[i] ? "" : "none";
+  });
+  if (res.hidden.length > 0 && res.plusFits) {
+    whoPlus.textContent = "+" + res.hidden.length;
+    whoPlus.title = "Mostrar ocultos";
+    whoPlus.style.display = "";
+    whoPlus.style.visibility = "visible";
+  } else {
+    whoPlus.style.display = "none";
+  }
+}
+
+function initWhoResize() {
+  if (whoRo || typeof ResizeObserver === "undefined") return;
+  let raf = 0;
+  whoRo = new ResizeObserver(() => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      applyWhoFit();
+    });
+  });
+  whoRo.observe(whoWrap);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => applyWhoFit()).catch(() => {});
+  }
+}
+
+function closeWhoModal() {
+  if (!whoModal) return;
+  document.removeEventListener("keydown", whoModalKey);
+  whoModal.remove();
+  whoModal = null;
+}
+
+function whoModalKey(e) {
+  if (e.key === "Escape") closeWhoModal();
+}
+
+function openWhoModal() {
+  if (whoModal || whoHidden.length === 0) return;
+  const idxs = whoHidden.slice();
+
+  const overlay = document.createElement("div");
+  overlay.className = "who-modal-overlay";
+  const box = document.createElement("div");
+  box.className = "who-modal";
+
+  const head = document.createElement("div");
+  head.className = "who-modal-head";
+  const title = document.createElement("div");
+  title.className = "who-modal-title";
+  title.textContent = "Elige quién responde";
+  const x = document.createElement("button");
+  x.className = "who-modal-x";
+  x.title = "Cerrar";
+  x.setAttribute("aria-label", "Cerrar");
+  const xi = document.createElement("i");
+  xi.className = "ti ti-x";
+  x.appendChild(xi);
+  head.append(title, x);
+
+  const list = document.createElement("div");
+  list.className = "who-modal-list";
+  let first = null;
+
+  for (const i of idxs) {
+    const chip = whoChips[i];
+    const value = chip.dataset.value;
+    const p = state.personas.find((q) => q.name === value);
+    const row = document.createElement("div");
+    row.className = "persona who-modal-row";
+    row.tabIndex = 0;
+    if (p) {
+      const av = document.createElement("div");
+      av.className = "avatar";
+      av.style.cssText = avatarCss(p);
+      av.textContent = initials(p.name);
+      const info = document.createElement("div");
+      info.className = "persona-info";
+      const nm = document.createElement("div");
+      nm.className = "persona-name";
+      nm.textContent = p.name;
+      info.appendChild(nm);
+      if (p.reference_audio_language) {
+        const lg = document.createElement("div");
+        lg.className = "persona-lang";
+        lg.textContent = p.reference_audio_language;
+        info.appendChild(lg);
+      }
+      row.append(av, info);
+    } else {
+      const info = document.createElement("div");
+      info.className = "persona-info";
+      const nm = document.createElement("div");
+      nm.className = "persona-name";
+      nm.textContent = chip.textContent;
+      info.appendChild(nm);
+      row.appendChild(info);
+    }
+    row.addEventListener("click", () => {
+      closeWhoModal();
+      selectWho(value);
+    });
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        row.click();
+      }
+    });
+    if (!first) first = row;
+    list.appendChild(row);
+  }
+
+  box.append(head, list);
+  overlay.appendChild(box);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeWhoModal();
+  });
+  x.addEventListener("click", closeWhoModal);
+  document.body.appendChild(overlay);
+  whoModal = overlay;
+  document.addEventListener("keydown", whoModalKey);
+  if (first) first.focus();
+}
+
 function renderWhoChips() {
-  const wrap = document.getElementById("who-chips");
-  wrap.textContent = "";
+  whoWrap = document.getElementById("who-chips");
+  whoWrap.textContent = "";
+  whoChips = [];
   const mk = (label, value) => {
     const b = document.createElement("button");
     b.className = "who-chip" + (value === state.who ? " sel" : "");
     b.textContent = label;
     b.dataset.value = value;
-    b.addEventListener("click", () => {
-      state.who = value;
-      wrap.querySelectorAll(".who-chip").forEach((c) => c.classList.remove("sel"));
-      b.classList.add("sel");
-    });
-    return b;
+    b.addEventListener("click", () => selectWho(value));
+    whoWrap.appendChild(b);
+    whoChips.push(b);
   };
-  wrap.appendChild(mk("LLM router", "router"));
-  for (const p of state.personas) wrap.appendChild(mk(p.name, p.name));
-  wrap.appendChild(mk("Random", "random"));
+  mk("LLM router", "router");
+  for (const p of state.personas) mk(p.name, p.name);
+  mk("Random", "random");
+
+  whoPlus = document.createElement("button");
+  whoPlus.className = "who-chip who-chip-plus";
+  whoPlus.style.display = "none";
+  whoPlus.addEventListener("click", openWhoModal);
+  whoWrap.appendChild(whoPlus);
+
+  applyWhoFit();
+  initWhoResize();
 }
 
 export function selectPersona(name, opts = {}) {
