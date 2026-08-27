@@ -16,6 +16,7 @@ Salida:   tts_e2e_results/repro_{A,B,C,D}.wav + tabla en pantalla + repro_server
 """
 
 import base64
+import datetime as dt
 import os
 import subprocess
 import sys
@@ -27,7 +28,7 @@ import numpy as np
 import soundfile as sf
 
 BASE = Path(__file__).resolve().parent
-RESULTS_DIR = BASE / "tts_e2e_results"
+RESULTS_DIR = BASE / "tts_e2e_results" / f"repro_run_{dt.datetime.now():%Y%m%d_%H%M%S}"
 OMNI_PY = BASE.parent / "OmniVoice" / "venv" / "Scripts" / "python.exe"
 SERVER_DIR = BASE / "tts-server"
 SERVER_LOG = RESULTS_DIR / "repro_server.log"

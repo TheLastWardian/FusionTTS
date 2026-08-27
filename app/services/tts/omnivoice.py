@@ -25,6 +25,8 @@ READY_POLL_INTERVAL = 1.0
 READY_TIMEOUT = 120.0
 CLIENT_TIMEOUT = httpx.Timeout(10.0, connect=10.0)
 STATUS_TIMEOUT = httpx.Timeout(2.0, connect=2.0)
+EMPTY_AUDIO_MAX_BYTES = 1000
+SYNTH_MAX_ATTEMPTS = 3
 
 
 def _json_detail(resp: httpx.Response) -> str:
@@ -231,40 +233,58 @@ class OmniVoiceEngine:
             raise TTSError("aborted")
         await self._ensure_ready()
         cfg = self._config
-        body = {
-            "text": text,
-            "audio_base64": audio_base64,
-            "prompt_text": prompt_text,
-            "language": language if language is not None else cfg.get("tts_language"),
-            "num_steps": cfg.get("tts_num_steps"),
-            "guidance_scale": cfg.get("tts_guidance_scale"),
-            "seed": cfg.get("tts_seed"),
-            "speed": cfg.get("tts_speed"),
-            "instruct": cfg.get("tts_instruct"),
-        }
         timeout = httpx.Timeout(cfg.get("tts_sentence_timeout"), connect=10.0)
         url = self._base_url() + "/synthesize"
-        try:
-            resp = await self._client.post(url, json=body, timeout=timeout)
-        except httpx.TimeoutException as exc:
-            raise TTSTimeoutError(
-                f"timeout en /synthesize tras {cfg.get('tts_sentence_timeout')} s"
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise TTSClientError(f"/synthesize: {exc}", 0) from exc
-        if resp.status_code == 503:
-            raise TTSNotReadyError(_json_detail(resp))
-        if resp.status_code >= 400:
-            raise TTSClientError(_json_detail(resp), resp.status_code)
-        try:
-            data = resp.json()
-            audio = base64.b64decode(data["audio_base64"])
-            sample_rate = int(data["sample_rate"])
-        except (ValueError, KeyError, TypeError) as exc:
-            raise TTSClientError(
-                f"respuesta invalida de /synthesize: {resp.text[:200]}", 200
-            ) from exc
-        return TTSResult(audio=audio, sample_rate=sample_rate)
+        seed = cfg.get("tts_seed")
+        for attempt in range(1, SYNTH_MAX_ATTEMPTS + 1):
+            body = {
+                "text": text,
+                "audio_base64": audio_base64,
+                "prompt_text": prompt_text,
+                "language": language if language is not None else cfg.get("tts_language"),
+                "num_steps": cfg.get("tts_num_steps"),
+                "guidance_scale": cfg.get("tts_guidance_scale"),
+                "seed": seed if attempt == 1 else None,
+                "speed": cfg.get("tts_speed"),
+                "instruct": cfg.get("tts_instruct"),
+            }
+            try:
+                resp = await self._client.post(url, json=body, timeout=timeout)
+            except httpx.TimeoutException as exc:
+                raise TTSTimeoutError(
+                    f"timeout en /synthesize tras {cfg.get('tts_sentence_timeout')} s"
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise TTSClientError(f"/synthesize: {exc}", 0) from exc
+            if resp.status_code == 503:
+                raise TTSNotReadyError(_json_detail(resp))
+            if resp.status_code >= 400:
+                raise TTSClientError(_json_detail(resp), resp.status_code)
+            try:
+                data = resp.json()
+                audio = base64.b64decode(data["audio_base64"])
+                sample_rate = int(data["sample_rate"])
+            except (ValueError, KeyError, TypeError) as exc:
+                raise TTSClientError(
+                    f"respuesta invalida de /synthesize: {resp.text[:200]}", 200
+                ) from exc
+            if len(audio) >= EMPTY_AUDIO_MAX_BYTES:
+                if attempt > 1:
+                    logger.info(
+                        "audio valido en intento %d/%d", attempt, SYNTH_MAX_ATTEMPTS
+                    )
+                return TTSResult(audio=audio, sample_rate=sample_rate)
+            logger.warning(
+                "audio vacio de /synthesize (intento %d/%d, %d bytes)",
+                attempt,
+                SYNTH_MAX_ATTEMPTS,
+                len(audio),
+            )
+            if abort_event is not None and abort_event.is_set():
+                raise TTSError("aborted")
+        raise TTSClientError(
+            f"audio vacio de /synthesize tras {SYNTH_MAX_ATTEMPTS} intentos", 200
+        )
 
     async def _ensure_ready(self) -> None:
         if self._closed:

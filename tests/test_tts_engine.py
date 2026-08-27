@@ -35,6 +35,7 @@ app = FastAPI()
 
 _state = {"status": "unloaded", "load_calls": 0}
 _calls = []
+_empty = {"left": int(os.getenv("EMPTY_FIRST_N", "0"))}
 
 
 @app.get("/health")
@@ -89,6 +90,12 @@ async def synthesize(req: dict):
         raise HTTPException(status_code=500, detail="boom detail")
     if _state["status"] != "ready":
         raise HTTPException(status_code=503, detail="Modelo no cargado")
+    if _empty["left"] > 0:
+        _empty["left"] -= 1
+        return {
+            "audio_base64": base64.b64encode(b"RIFF" + b"\\x00" * 36).decode("utf-8"),
+            "sample_rate": 24000,
+        }
     buf = io.BytesIO()
     sf.write(buf, np.zeros(2400, dtype="float32"), 24000, format="WAV")
     buf.seek(0)
@@ -354,3 +361,37 @@ async def test_16_language_override(make_engine):
     await engine.synthesize("hola")
     calls = (await _get(port, "/calls"))["calls"]
     assert calls[-1]["language"] == "es"
+
+
+async def test_17_synthesize_retries_empty_audio(make_engine, monkeypatch):
+    monkeypatch.setenv("EMPTY_FIRST_N", "1")
+    engine, config = make_engine()
+    await engine.start()
+    result = await engine.synthesize("hola")
+    assert result.sample_rate == 24000
+    data, sr = sf.read(BytesIO(result.audio), dtype="float32")
+    assert sr == 24000
+    assert len(data) == 2400
+    port = config.get("tts_server_port")
+    calls = (await _get(port, "/calls"))["calls"]
+    assert len(calls) == 2
+
+
+async def test_18_synthesize_empty_all_attempts_raises(make_engine, monkeypatch):
+    monkeypatch.setenv("EMPTY_FIRST_N", "99")
+    engine, _ = make_engine()
+    await engine.start()
+    with pytest.raises(TTSClientError, match="audio vacio"):
+        await engine.synthesize("hola")
+
+
+async def test_19_synthesize_retry_uses_random_seed(make_engine, monkeypatch):
+    monkeypatch.setenv("EMPTY_FIRST_N", "1")
+    engine, config = make_engine()
+    config.set("tts_seed", 424242)
+    await engine.start()
+    await engine.synthesize("hola")
+    port = config.get("tts_server_port")
+    calls = (await _get(port, "/calls"))["calls"]
+    assert calls[0]["seed"] == 424242
+    assert calls[1]["seed"] is None
