@@ -82,7 +82,7 @@ function startPersonaBubble(name) {
   msg.append(av, body);
   messagesEl.appendChild(msg);
   scrollBottom();
-  return { bodyEl: body, textEl, dots, cursor, final: false };
+  return { rootEl: msg, bodyEl: body, textEl, dots, cursor, final: false };
 }
 
 function appendToken(b, token) {
@@ -99,6 +99,10 @@ function finalizeBubble(b, fullText) {
   if (!b || b.final) return;
   b.final = true;
   if (typeof fullText === "string") b.textEl.textContent = fullText;
+  if (!b.textEl.textContent.trim()) {
+    b.rootEl.remove();
+    return;
+  }
   if (b.dots) b.dots.remove();
   b.cursor.remove();
   const actions = document.createElement("div");
