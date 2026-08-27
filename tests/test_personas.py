@@ -50,7 +50,7 @@ def test_create_get_list_roundtrip(client):
 
     r = client.get("/api/personas/Jean")
     assert r.status_code == 200
-    assert r.json() == body
+    assert r.json() == {**body, "transcript": None}
 
 
 def test_create_duplicate_409(client):

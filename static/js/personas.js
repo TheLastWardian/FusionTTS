@@ -1,7 +1,10 @@
-// personas.js — sidebar de personas, panel de detalle y who-chips (display; edición en T17).
+// personas.js — sidebar de personas, panel de detalle, who-chips, upload de .wav y editor de persona.
 import { state } from "./state.js";
 import { api, avatarCss, initials, toast } from "./utils.js";
 import { setRightTab } from "./layout.js";
+
+let uploading = false;
+let currentPersona = null;
 
 function renderSidebar() {
   const list = document.getElementById("persona-list");
@@ -9,7 +12,7 @@ function renderSidebar() {
   if (state.personas.length === 0) {
     const empty = document.createElement("div");
     empty.className = "list-empty";
-    empty.textContent = "Sin personas (upload llega en T17)";
+    empty.textContent = "Sin personas — subí un .wav";
     list.appendChild(empty);
     return;
   }
@@ -48,9 +51,146 @@ function renderSidebar() {
   }
 }
 
+function wireDropZone(dropEl) {
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = ".wav";
+  fileInput.hidden = true;
+  fileInput.addEventListener("change", () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (f) uploadWav(f);
+    fileInput.value = "";
+  });
+  dropEl.appendChild(fileInput);
+  dropEl.addEventListener("click", (e) => {
+    if (e.target === fileInput) return;
+    fileInput.click();
+  });
+  dropEl.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropEl.classList.add("dragover");
+  });
+  dropEl.addEventListener("dragleave", () => {
+    dropEl.classList.remove("dragover");
+  });
+  dropEl.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropEl.classList.remove("dragover");
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) uploadWav(f);
+  });
+}
+
+function buildDropZone() {
+  const drop = document.createElement("div");
+  drop.className = "drop-zone";
+  const up = document.createElement("i");
+  up.className = "ti ti-upload";
+  drop.append(up, document.createTextNode("\nSoltá un .wav para agregar una persona"));
+  wireDropZone(drop);
+  return drop;
+}
+
+function setDropBusy(busy, filename) {
+  const panel = document.getElementById("rpanel-personas");
+  const drops = [...panel.querySelectorAll(".drop-zone")];
+  if (busy) {
+    for (const drop of drops) {
+      drop.classList.remove("dragover");
+      drop.classList.add("busy");
+      drop.textContent = "";
+      const icon = document.createElement("i");
+      icon.className = "ti ti-loader spinning";
+      drop.append(icon, document.createTextNode(`\nTranscribiendo «${filename}»… (ASR + LLM)`));
+    }
+  } else if (drops.some((d) => d.classList.contains("busy"))) {
+    if (currentPersona) renderDetail(currentPersona);
+    else renderEmptyDetail();
+  }
+}
+
+async function uploadWav(file) {
+  if (uploading) return;
+  if (!/\.wav$/i.test(file.name)) {
+    toast("Solo se aceptan archivos .wav", "error");
+    return;
+  }
+  uploading = true;
+  setDropBusy(true, file.name);
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/personas/from-audio", { method: "POST", body: fd });
+    let body = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+    if (!res.ok) {
+      let detail = body ? body.detail : undefined;
+      if (detail === undefined) detail = body ? JSON.stringify(body) : res.statusText;
+      if (typeof detail !== "string") detail = JSON.stringify(detail);
+      throw new Error(detail || `HTTP ${res.status}`);
+    }
+    await refreshPersonas();
+    await selectPersona(body.name);
+    toast(`«${body.name}» creada`, "success");
+    if (body.warning) toast(body.warning, "warning");
+  } catch (err) {
+    toast(err.message || "Error al subir el .wav", "error");
+  } finally {
+    uploading = false;
+    setDropBusy(false);
+  }
+}
+
+async function retranscribe(p, btn, box, syncSave) {
+  btn.disabled = true;
+  btn.textContent = "";
+  const icon = document.createElement("i");
+  icon.className = "ti ti-loader spinning";
+  btn.append(icon, document.createTextNode(" Re-transcribiendo…"));
+  try {
+    const body = await api(`/api/personas/${encodeURIComponent(p.name)}/retranscribe`, { method: "POST" });
+    p.transcript = body.transcript;
+    box.value = body.transcript ?? "";
+    toast("Transcripción actualizada", "success");
+  } catch (err) {
+    toast(err.message || "Error al re-transcribir", "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "";
+    const ri = document.createElement("i");
+    ri.className = "ti ti-refresh";
+    btn.append(ri, document.createTextNode(" Re-transcribe"));
+    syncSave();
+  }
+}
+
+async function saveTranscript(p, box, btn, syncSave) {
+  const value = box.value;
+  if (value === (p.transcript ?? "")) return;
+  btn.disabled = true;
+  try {
+    await api(`/api/personas/${encodeURIComponent(p.name)}/transcript`, {
+      method: "PUT",
+      body: { transcript: value },
+    });
+    p.transcript = value;
+    toast("Transcripción guardada", "success");
+  } catch (err) {
+    toast(err.message || "Error al guardar la transcripción", "error");
+    box.value = p.transcript ?? "";
+  } finally {
+    syncSave();
+  }
+}
+
 function renderDetail(p) {
   const panel = document.getElementById("rpanel-personas");
   panel.textContent = "";
+  currentPersona = p;
 
   const head = document.createElement("div");
   head.className = "pd-head";
@@ -97,49 +237,263 @@ function renderDetail(p) {
   row.appendChild(wavName);
   const reBtn = document.createElement("button");
   reBtn.className = "wav-btn";
-  reBtn.disabled = true;
-  reBtn.title = "Disponible en T17";
   const ri = document.createElement("i");
   ri.className = "ti ti-refresh";
   reBtn.append(ri, document.createTextNode(" Re-transcribe"));
+  if (p.reference_audio) {
+    reBtn.addEventListener("click", () => retranscribe(p, reBtn, box, syncSave));
+  } else {
+    reBtn.disabled = true;
+    reBtn.title = "Sin referencia de voz";
+  }
   row.appendChild(reBtn);
   voice.append(vlabel, row);
   panel.appendChild(voice);
 
+  const box = document.createElement("textarea");
+  box.className = "transcript-box";
+  box.value = p.transcript ?? "";
+  box.placeholder = "Sin transcripción";
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "wav-btn";
+  const si = document.createElement("i");
+  si.className = "ti ti-check";
+  saveBtn.append(si, document.createTextNode(" Guardar"));
+  const syncSave = () => {
+    saveBtn.disabled = box.value === (p.transcript ?? "");
+  };
+  box.addEventListener("input", syncSave);
+  saveBtn.addEventListener("click", () => saveTranscript(p, box, saveBtn, syncSave));
+  syncSave();
+  const tactions = document.createElement("div");
+  tactions.className = "transcript-actions";
+  tactions.appendChild(saveBtn);
+  const transcript = document.createElement("div");
+  transcript.className = "pd-section";
+  const tlabel = document.createElement("div");
+  tlabel.className = "pd-slabel";
+  tlabel.textContent = "Transcripción";
+  transcript.append(tlabel, box, tactions);
+  panel.appendChild(transcript);
+
   const actions = document.createElement("div");
   actions.className = "pd-actions";
   const editBtn = document.createElement("button");
-  editBtn.disabled = true;
-  editBtn.title = "Disponible en T17";
   const ei = document.createElement("i");
   ei.className = "ti ti-edit";
   editBtn.append(ei, document.createTextNode(" Edit"));
+  editBtn.addEventListener("click", () => openPersonaModal(p));
   const delBtn = document.createElement("button");
   delBtn.className = "danger";
-  delBtn.disabled = true;
-  delBtn.title = "Disponible en T17";
   const di = document.createElement("i");
   di.className = "ti ti-trash";
   delBtn.append(di, document.createTextNode(" Delete"));
+  delBtn.addEventListener("click", () => openDeleteModal(p));
   actions.append(editBtn, delBtn);
   panel.appendChild(actions);
 
-  const drop = document.createElement("div");
-  drop.className = "drop-zone disabled";
-  drop.title = "Disponible en T17";
-  const up = document.createElement("i");
-  up.className = "ti ti-upload";
-  drop.append(up, document.createTextNode("\nSoltá un .wav para agregar una persona"));
-  panel.appendChild(drop);
+  panel.appendChild(buildDropZone());
 }
 
 function renderEmptyDetail() {
   const panel = document.getElementById("rpanel-personas");
   panel.textContent = "";
+  currentPersona = null;
   const empty = document.createElement("div");
   empty.className = "pd-empty";
-  empty.textContent = "Sin personas. El upload de .wav llega en T17.";
+  empty.textContent = "Sin personas todavía";
   panel.appendChild(empty);
+  panel.appendChild(buildDropZone());
+  const hint = document.createElement("div");
+  hint.className = "pd-hint";
+  hint.textContent = "El nombre sale del archivo: <Nombre>.wav, <Nombre>_Eng.wav o <Nombre>_Latino.wav";
+  panel.appendChild(hint);
+}
+
+let personaModal = null;
+
+function closePersonaModal() {
+  if (!personaModal) return;
+  document.removeEventListener("keydown", personaModalKey);
+  personaModal.remove();
+  personaModal = null;
+}
+
+function personaModalKey(e) {
+  if (e.key === "Escape") closePersonaModal();
+}
+
+function buildModalShell(title) {
+  const overlay = document.createElement("div");
+  overlay.className = "persona-modal-overlay";
+  const boxEl = document.createElement("div");
+  boxEl.className = "persona-modal";
+
+  const head = document.createElement("div");
+  head.className = "persona-modal-head";
+  const titleEl = document.createElement("div");
+  titleEl.className = "persona-modal-title";
+  titleEl.textContent = title;
+  const x = document.createElement("button");
+  x.className = "persona-modal-x";
+  x.title = "Cerrar";
+  x.setAttribute("aria-label", "Cerrar");
+  const xi = document.createElement("i");
+  xi.className = "ti ti-x";
+  x.appendChild(xi);
+  x.addEventListener("click", closePersonaModal);
+  head.append(titleEl, x);
+
+  const body = document.createElement("div");
+  body.className = "persona-modal-body";
+  boxEl.append(head, body);
+  overlay.appendChild(boxEl);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closePersonaModal();
+  });
+  return { overlay, boxEl, body };
+}
+
+function buildModalFoot() {
+  const foot = document.createElement("div");
+  foot.className = "persona-modal-foot";
+  const cancel = document.createElement("button");
+  cancel.className = "pm-btn";
+  cancel.textContent = "Cancelar";
+  cancel.addEventListener("click", closePersonaModal);
+  foot.appendChild(cancel);
+  return { foot, cancel };
+}
+
+async function savePersona(p, description, systemPrompt, color) {
+  const payload = {
+    name: p.name,
+    description,
+    system_prompt: systemPrompt,
+    router_hints: p.router_hints || [],
+    avatar_color: color,
+    avatar_image: p.avatar_image ?? null,
+    reference_audio: p.reference_audio ?? null,
+    reference_audio_transcript: p.reference_audio_transcript ?? null,
+    reference_audio_language: p.reference_audio_language ?? null,
+  };
+  try {
+    await api(`/api/personas/${encodeURIComponent(p.name)}`, { method: "PUT", body: payload });
+  } catch (err) {
+    toast(err.message || "Error al guardar la persona", "error");
+    return;
+  }
+  closePersonaModal();
+  toast("Persona actualizada", "success");
+  await selectPersona(p.name);
+}
+
+function openPersonaModal(p) {
+  if (personaModal) return;
+  const { overlay, boxEl, body } = buildModalShell(`Editar «${p.name}»`);
+
+  const mkField = (label) => {
+    const f = document.createElement("div");
+    f.className = "pm-field";
+    const l = document.createElement("div");
+    l.className = "pm-label";
+    l.textContent = label;
+    f.appendChild(l);
+    return f;
+  };
+
+  const nameF = mkField("Nombre");
+  const nameInput = document.createElement("input");
+  nameInput.className = "pm-input";
+  nameInput.type = "text";
+  nameInput.value = p.name;
+  nameInput.disabled = true;
+  nameF.appendChild(nameInput);
+
+  const descF = mkField("Descripción");
+  const descInput = document.createElement("textarea");
+  descInput.className = "pm-textarea";
+  descInput.value = p.description || "";
+  descF.appendChild(descInput);
+
+  const promptF = mkField("System prompt");
+  const promptInput = document.createElement("textarea");
+  promptInput.className = "pm-textarea tall";
+  promptInput.value = p.system_prompt || "";
+  promptF.appendChild(promptInput);
+
+  const colorF = mkField("Color");
+  const colorWrap = document.createElement("div");
+  colorWrap.className = "pm-color";
+  const hex = /^#[0-9a-fA-F]{6}$/.test(p.avatar_color || "") ? p.avatar_color : "#888888";
+  const colorInput = document.createElement("input");
+  colorInput.type = "color";
+  colorInput.value = hex;
+  const hexText = document.createElement("span");
+  hexText.className = "pm-color-hex";
+  hexText.textContent = hex;
+  colorInput.addEventListener("input", () => {
+    hexText.textContent = colorInput.value;
+  });
+  colorWrap.append(colorInput, hexText);
+  colorF.appendChild(colorWrap);
+
+  body.append(nameF, descF, promptF, colorF);
+
+  const { foot } = buildModalFoot();
+  const save = document.createElement("button");
+  save.className = "pm-btn primary";
+  save.textContent = "Guardar";
+  save.addEventListener("click", () =>
+    savePersona(p, descInput.value, promptInput.value, colorInput.value)
+  );
+  foot.appendChild(save);
+  boxEl.appendChild(foot);
+
+  document.body.appendChild(overlay);
+  personaModal = overlay;
+  document.addEventListener("keydown", personaModalKey);
+}
+
+async function deletePersona(p, btn) {
+  btn.disabled = true;
+  try {
+    await api(`/api/personas/${encodeURIComponent(p.name)}`, { method: "DELETE" });
+  } catch (err) {
+    toast(err.message || "Error al borrar la persona", "error");
+    btn.disabled = false;
+    return;
+  }
+  closePersonaModal();
+  toast(`«${p.name}» borrada`, "success");
+  await refreshPersonas();
+  if (state.personas.length > 0) {
+    await selectPersona(state.personas[0].name, { openPanel: false });
+  } else {
+    renderEmptyDetail();
+  }
+}
+
+function openDeleteModal(p) {
+  if (personaModal) return;
+  const { overlay, boxEl, body } = buildModalShell(`Borrar «${p.name}»`);
+
+  const msg = document.createElement("p");
+  msg.className = "pm-text";
+  msg.textContent = `¿Borrar «${p.name}»? Se pierde su voz de referencia.`;
+  body.appendChild(msg);
+
+  const { foot } = buildModalFoot();
+  const del = document.createElement("button");
+  del.className = "pm-btn danger";
+  del.textContent = "Borrar";
+  del.addEventListener("click", () => deletePersona(p, del));
+  foot.appendChild(del);
+  boxEl.appendChild(foot);
+
+  document.body.appendChild(overlay);
+  personaModal = overlay;
+  document.addEventListener("keydown", personaModalKey);
 }
 
 const WHO_GAP = 5;
@@ -338,23 +692,35 @@ function renderWhoChips() {
   initWhoResize();
 }
 
-export function selectPersona(name, opts = {}) {
+export async function selectPersona(name, opts = {}) {
   const p = state.personas.find((x) => x.name === name);
   if (!p) return;
   document.querySelectorAll("#persona-list .persona").forEach((el) => {
     el.classList.toggle("active", el.dataset.name === name);
   });
-  renderDetail(p);
   if (opts.openPanel !== false) setRightTab("personas");
+  let full;
+  try {
+    full = await api("/api/personas/" + encodeURIComponent(name));
+  } catch (err) {
+    toast(err.message || "Error al cargar la persona", "error");
+    return;
+  }
+  const idx = state.personas.findIndex((x) => x.name === name);
+  if (idx >= 0) state.personas[idx] = full;
+  renderDetail(full);
+}
+
+async function refreshPersonas() {
+  state.personas = (await api("/api/personas")).personas || [];
+  renderSidebar();
+  renderWhoChips();
 }
 
 export async function initPersonas() {
-  const data = await api("/api/personas");
-  state.personas = data.personas || [];
-  renderSidebar();
-  renderWhoChips();
+  await refreshPersonas();
   if (state.personas.length > 0) {
-    selectPersona(state.personas[0].name, { openPanel: false });
+    await selectPersona(state.personas[0].name, { openPanel: false });
   } else {
     renderEmptyDetail();
   }

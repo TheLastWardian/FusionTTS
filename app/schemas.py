@@ -30,6 +30,10 @@ class Persona(BaseModel):
     reference_audio_language: str | None
 
 
+class TranscriptUpdate(BaseModel):
+    transcript: str
+
+
 class Room(BaseModel):
     name: str
     persona_names: list[str]

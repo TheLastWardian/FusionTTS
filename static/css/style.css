@@ -529,6 +529,69 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .drop-zone i { font-size: 22px; display: block; margin-bottom: 5px; }
 .drop-zone.disabled { opacity: .5; cursor: not-allowed; }
 .drop-zone.disabled:hover { background: none; border-color: var(--border-strong); color: var(--text-muted); }
+.drop-zone.dragover { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.drop-zone.busy { opacity: .8; cursor: wait; }
+.drop-zone.busy i { animation: ftts-spin .9s linear infinite; }
+
+/* ── Persona detail: transcripción + modal ── */
+.pd-hint { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 8px; }
+
+.transcript-box {
+  width: 100%; min-height: 90px; resize: vertical;
+  font: 12px/1.55 var(--mono); color: var(--text-secondary);
+  background: var(--bg1); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 8px 10px; outline: none;
+}
+.transcript-box:focus { border-color: var(--accent-border); }
+.transcript-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+
+.persona-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 60; display: flex; align-items: center; justify-content: center; }
+.persona-modal {
+  background: var(--bg2); border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) + 2px);
+  width: min(440px, 88vw); max-height: 72vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,.35);
+}
+.persona-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.persona-modal-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.persona-modal-x {
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: var(--radius);
+  background: transparent; color: var(--text-muted);
+  cursor: pointer; font-size: 15px;
+  transition: all .1s;
+  flex-shrink: 0;
+}
+.persona-modal-x:hover { background: var(--bg3); color: var(--text-primary); }
+.persona-modal-body { padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.persona-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.pm-field { display: flex; flex-direction: column; gap: 4px; }
+.pm-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); font-weight: 600; }
+.pm-input, .pm-textarea {
+  width: 100%;
+  font: 12px/1.5 var(--font); color: var(--text-primary);
+  background: var(--bg1); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 7px 9px; outline: none;
+}
+.pm-input:focus, .pm-textarea:focus { border-color: var(--accent-border); }
+.pm-textarea { min-height: 64px; resize: vertical; }
+.pm-textarea.tall { min-height: 110px; }
+.pm-text { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
+.pm-color { display: flex; align-items: center; gap: 8px; }
+.pm-color input[type="color"] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--bg1); cursor: pointer; }
+.pm-color-hex { font-size: 11px; font-family: var(--mono); color: var(--text-secondary); }
+.pm-btn {
+  font: 12px var(--font); padding: 6px 12px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--bg2); color: var(--text-secondary);
+  cursor: pointer;
+}
+.pm-btn:hover { background: var(--bg3); color: var(--text-primary); }
+.pm-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pm-btn.primary:hover { filter: brightness(1.08); }
+.pm-btn.danger { color: var(--danger); border-color: var(--danger); }
+.pm-btn.danger:hover { background: var(--danger-bg); }
 
 /* ── Disabled / focus ── */
 button:disabled { opacity: .5; cursor: not-allowed; }
@@ -559,6 +622,7 @@ textarea:disabled { opacity: .5; cursor: not-allowed; }
 }
 .toast.show { opacity: 1; transform: none; }
 .toast-success { border-left-color: var(--success); }
+.toast-warning { border-left-color: var(--warning); }
 .toast-error { border-left-color: var(--danger); }
 
 /* ── Banner de error de API ── */
