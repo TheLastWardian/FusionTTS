@@ -14,6 +14,7 @@ from app.routers import sessions as sessions_router
 from app.routers import tts as tts_router
 from app.rooms import RoomConfigStore
 from app.schemas import HealthResponse
+from app.services.asr.manager import ASRManager
 from app.services.llm import LLMClient
 from app.services.tts.dispatcher import TTSDispatcher
 from app.services.tts.registry import create_engine
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
     state = AppState(config)
     state.llm = LLMClient(config)
     state.tts_engine = create_engine(config.get("tts_engine"), config)
+    state.asr_manager = ASRManager(config)
     state.rooms = RoomConfigStore(config)
     state.personas = PersonaStore(rooms=state.rooms)
     state.dispatcher = TTSDispatcher(
@@ -40,6 +42,7 @@ async def lifespan(app: FastAPI):
     await state.llm.close()
     await state.dispatcher.shutdown()
     await state.tts_engine.close()
+    await state.asr_manager.close()
 
 
 app = FastAPI(title="FusionTTS", lifespan=lifespan)
