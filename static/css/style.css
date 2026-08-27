@@ -67,7 +67,6 @@ body.resizing { user-select: none; -webkit-user-select: none; }
   grid-template-columns: var(--left-w) 1fr var(--right-w);
   grid-template-rows: 44px 1fr;
   height: 100vh;
-  min-height: 600px;
   background: var(--bg0);
   overflow: hidden;
 }
@@ -202,7 +201,10 @@ body.resizing { user-select: none; -webkit-user-select: none; }
 .gutter-btn:hover { color: var(--accent); border-color: var(--accent-border); }
 
 /* ── Left sidebar ── */
+/* grid-column explícitos: al colapsar (display:none) o en narrow (position:fixed)
+   los paneles salen del flujo de grilla; sin esto el chat salta a la columna de 0px */
 .left {
+  grid-column: 1;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -297,7 +299,7 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
 .list-empty { font-size: 11px; color: var(--text-muted); padding: 8px 10px; }
 
 /* ── Chat ── */
-.chat { display: flex; flex-direction: column; background: var(--bg0); overflow: hidden; min-width: 0; }
+.chat { grid-column: 2; display: flex; flex-direction: column; background: var(--bg0); overflow: hidden; min-width: 0; }
 .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .messages::-webkit-scrollbar { width: 4px; }
 .messages::-webkit-scrollbar-track { background: transparent; }
@@ -399,7 +401,7 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
 .send-btn:hover { opacity: .85; }
 
 /* ── Right panel ── */
-.right { border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg0); overflow: hidden; }
+.right { grid-column: 3; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg0); overflow: hidden; }
 body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .right-tabs {
   display: flex;
