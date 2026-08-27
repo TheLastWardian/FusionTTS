@@ -339,7 +339,7 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
 }
 .msg-body { max-width: 72%; }
 .msg.user .msg-body { align-items: flex-end; display: flex; flex-direction: column; }
-.msg-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; display: flex; align-items: center; gap: 5px; }
+.msg-meta { font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; display: flex; align-items: center; gap: 5px; }
 .msg-bubble {
   font-size: 13px; line-height: 1.6;
   padding: 8px 12px; border-radius: 10px;
@@ -383,7 +383,7 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
   padding: 6px 10px 0;
   border-bottom: 1px solid var(--border);
 }
-.input-who-label { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.input-who-label { font-size: 10px; color: var(--text-secondary); white-space: nowrap; }
 #who-chips { display: flex; gap: 5px; flex: 1; min-width: 0; overflow: hidden; }
 .who-chip {
   font-size: 11px; padding: 2px 7px;
@@ -393,7 +393,7 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
   max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .who-chip.sel { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent-border); }
-.who-chip:not(.sel) { background: transparent; color: var(--text-muted); border: 1px solid transparent; }
+.who-chip:not(.sel) { background: transparent; color: var(--text-secondary); border: 1px solid transparent; }
 .who-chip:not(.sel):hover { background: var(--bg3); color: var(--text-secondary); }
 .who-chip.who-chip-plus, .who-chip.who-chip-plus:not(.sel):hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-border); }
 .chat-input {
