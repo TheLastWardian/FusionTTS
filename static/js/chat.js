@@ -1,6 +1,7 @@
 // chat.js — flujo de chat: envío POST /api/chat, streaming SSE, burbujas usuario/persona, cancel.
 import { state } from "./state.js";
 import { initials, toast, avatarCss } from "./utils.js";
+import { feedAudioChunk, onTTSEvent, replayTTS, ttsReady } from "./tts.js";
 
 let initialized = false;
 let ta = null;
@@ -82,7 +83,7 @@ function startPersonaBubble(name) {
   msg.append(av, body);
   messagesEl.appendChild(msg);
   scrollBottom();
-  return { rootEl: msg, bodyEl: body, textEl, dots, cursor, final: false };
+  return { rootEl: msg, bodyEl: body, textEl, dots, cursor, persona: name, final: false };
 }
 
 function appendToken(b, token) {
@@ -122,12 +123,24 @@ function finalizeBubble(b, fullText) {
     }
   });
   const replay = document.createElement("button");
-  replay.className = "msg-act";
-  replay.disabled = true;
-  replay.title = "Disponible en T16";
+  replay.className = "msg-act msg-act-replay";
+  replay.title = ttsReady() ? "Reproducir (TTS)" : "TTS desactivado";
+  replay.disabled = !ttsReady();
   const ri = document.createElement("i");
   ri.className = "ti ti-volume";
   replay.appendChild(ri);
+  let replayBusy = false;
+  replay.addEventListener("click", async () => {
+    if (replay.disabled || replayBusy) return;
+    replayBusy = true;
+    replay.disabled = true;
+    ri.className = "ti ti-loader spinning";
+    await replayTTS(b.textEl.textContent, b.persona);
+    replayBusy = false;
+    ri.className = "ti ti-volume";
+    replay.disabled = !ttsReady();
+    replay.title = ttsReady() ? "Reproducir (TTS)" : "TTS desactivado";
+  });
   actions.append(copy, replay);
   b.bodyEl.appendChild(actions);
 }
@@ -147,6 +160,10 @@ function onEvent(ev) {
   } else if (ev.type === "done") {
     finalizeBubble(current, ev.text);
     current = null;
+  } else if (ev.type === "audio_chunk") {
+    feedAudioChunk(ev);
+  } else if (ev.type === "tts_state") {
+    onTTSEvent(ev);
   } else if (ev.type === "error") {
     toast(ev.message || "Error en el chat", "error");
   } else if (ev.type === "complete") {
@@ -247,6 +264,13 @@ export function initChat() {
   btnSend.addEventListener("click", () => {
     if (state.streaming) cancelChat();
     else send();
+  });
+  window.addEventListener("tts:status", (e) => {
+    const ready = !!(e.detail && e.detail.ready);
+    messagesEl.querySelectorAll(".msg-act-replay").forEach((btn) => {
+      btn.disabled = !ready;
+      btn.title = ready ? "Reproducir (TTS)" : "TTS desactivado";
+    });
   });
   updateSendButton();
 }
