@@ -58,6 +58,12 @@ test("caso patologico (seleccionado + plus > available) -> +N oculto, selecciona
   assert.equal(r.plusFits, false);
 });
 
+test("prefijo estricto: un chip que no cabe corta la fila (los siguientes no entran, segun spec)", () => {
+  const r = fitChips([20, 50, 10, 10], 60, -1, 5, 0);
+  assert.deepEqual(r.visible, [true, false, false, false]);
+  assert.deepEqual(r.hidden, [1, 2, 3]);
+});
+
 test("selectedIdx fuera de rango se trata como -1", () => {
   const r = fitChips([30, 30], 60, 5, 5, 0);
   assert.deepEqual(r.visible, [true, false]);

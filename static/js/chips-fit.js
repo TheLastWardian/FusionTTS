@@ -21,6 +21,8 @@
       if (used + gap + widths[i] <= available - reserved) {
         visible[i] = true;
         used += gap + widths[i];
+      } else {
+        break;
       }
     }
 

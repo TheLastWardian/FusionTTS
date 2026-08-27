@@ -168,6 +168,7 @@ function measurePlus(n) {
 function applyWhoFit() {
   if (!whoWrap || whoChips.length === 0) return;
   const avail = whoWrap.clientWidth;
+  whoChips.forEach((c) => { c.style.display = ""; });
   const widths = whoChips.map((c) => c.offsetWidth);
   const selIdx = whoChips.findIndex((c) => c.dataset.value === state.who);
 
