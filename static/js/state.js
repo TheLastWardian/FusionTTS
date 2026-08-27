@@ -1,0 +1,11 @@
+// state.js — estado global de la SPA (config, personas, rooms, TTS, tema, layout).
+export const state = {
+  config: {},
+  personas: [],
+  rooms: [],
+  room: "default",
+  tts: { engine: null, dispatcher: null },
+  theme: "dark",
+  layout: { left: 200, right: 264, leftCollapsed: false, rightCollapsed: false },
+  mode: "wide",
+};

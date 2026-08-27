@@ -1,12 +1,114 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>FusionTTS</title>
-  </head>
-  <body>
-    <h1>FusionTTS</h1>
-    <p>FusionTTS — SPA viene en T14</p>
-  </body>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FusionTTS</title>
+<link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <button class="tb-icon tb-menu" id="btn-menu" title="Menú" aria-label="Abrir menú">
+      <i class="ti ti-menu-2"></i>
+    </button>
+    <span class="tb-brand">FusionTTS</span>
+    <span class="tb-room" id="tb-room" title="Room actual (cambiá desde el menú)">
+      <i class="ti ti-messages"></i>
+      <span id="room-label">…</span>
+    </span>
+    <div class="tb-right">
+      <div id="tts-chip" class="tts-chip" title="Click para encender/apagar TTS">
+        <div class="tts-wave" id="tts-wave">
+          <div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div>
+        </div>
+        <span id="tts-label">TTS · off</span>
+      </div>
+      <div class="tts-controls" id="tts-ctrl">
+        <button class="tts-btn" id="btn-tts-pause" title="Pausar" aria-label="Pausar TTS" disabled><i class="ti ti-player-pause"></i></button>
+        <button class="tts-btn" id="btn-tts-stop" title="Detener" aria-label="Detener TTS" disabled><i class="ti ti-player-stop"></i></button>
+      </div>
+      <button class="tb-icon" id="btn-theme" title="Cambiar tema" aria-label="Cambiar tema">
+        <i class="ti ti-moon" id="theme-icon"></i>
+      </button>
+      <button class="tb-icon" id="btn-settings" title="Config" aria-label="Config">
+        <i class="ti ti-settings"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Gutter izquierdo (resize + colapso) -->
+  <div class="gutter gutter-left" id="gutter-left">
+    <button class="gutter-btn" id="btn-collapse-left" title="Colapsar panel" aria-label="Colapsar panel izquierdo">
+      <i class="ti ti-chevrons-left"></i>
+    </button>
+  </div>
+
+  <!-- Left sidebar -->
+  <aside class="left" id="left">
+    <div class="section-head">
+      Personas
+      <button id="btn-personas-admin" title="Administrar personas" aria-label="Administrar personas"><i class="ti ti-settings"></i></button>
+    </div>
+    <div class="persona-list" id="persona-list"></div>
+    <div class="rooms-section">
+      <div class="section-head section-head-plain">Rooms</div>
+      <div id="room-list"></div>
+      <div class="room-form" id="room-form" hidden>
+        <input type="text" id="room-name" placeholder="nombre del room" maxlength="64" spellcheck="false">
+        <button class="room-form-btn" id="room-form-ok" title="Crear room" aria-label="Crear room"><i class="ti ti-check"></i></button>
+      </div>
+      <button class="room-item" id="btn-new-room"><i class="ti ti-plus"></i> New room</button>
+    </div>
+  </aside>
+
+  <!-- Chat -->
+  <main class="chat">
+    <div class="messages" id="messages">
+      <div class="empty-state">
+        <i class="ti ti-messages"></i>
+        <span>El chat llega en el próximo paso (T15)</span>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="input-row">
+        <div class="input-wrap">
+          <div class="input-who">
+            <span class="input-who-label">Responde:</span>
+            <span id="who-chips"></span>
+          </div>
+          <textarea class="chat-input" id="chat-input" placeholder="Escribí un mensaje… o adjuntá una imagen" rows="1" disabled title="Disponible en T15"></textarea>
+        </div>
+        <button class="send-btn" id="btn-send" aria-label="Enviar mensaje" title="Enviar" disabled><i class="ti ti-send"></i></button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Gutter derecho (resize + colapso) -->
+  <div class="gutter gutter-right" id="gutter-right">
+    <button class="gutter-btn" id="btn-collapse-right" title="Colapsar panel" aria-label="Colapsar panel derecho">
+      <i class="ti ti-chevrons-right"></i>
+    </button>
+  </div>
+
+  <!-- Right panel -->
+  <aside class="right" id="right">
+    <div class="right-tabs">
+      <button class="rtab active" id="tab-settings">Config</button>
+      <button class="rtab" id="tab-personas">Personas</button>
+    </div>
+    <div class="rpanel active" id="rpanel-settings"></div>
+    <div class="rpanel" id="rpanel-personas"></div>
+  </aside>
+
+</div>
+<div class="drawer-overlay" id="drawer-overlay"></div>
+<div class="toasts" id="toasts"></div>
+<div class="api-banner" id="api-banner">No se pudo conectar al API</div>
+<script type="module" src="js/app.js"></script>
+</body>
 </html>
