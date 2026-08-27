@@ -15,6 +15,7 @@ import argparse
 import base64
 import binascii
 import datetime as dt
+import io
 import json
 import subprocess
 import sys
@@ -32,7 +33,7 @@ RESULT_JSON = RESULTS_DIR / "result.json"
 RESULT_LOG = RESULTS_DIR / "result.log"
 
 TEST_TEXT_AUTO = "Hola. Este es un mensaje de prueba para verificar el sistema de voz de FusionTTS."
-TEST_TEXT_PERSONA = "Esta voz pertenece a una persona con audio de referencia. Esperemos que suene natural."
+TEST_TEXT_PERSONA = "This voice belongs to a persona with reference audio. Hopefully it sounds natural."
 CHAT_TEXT = "Hola! Responde con una frase corta, estamos probando la voz."
 CHAT_TEXT_RESPAWN = "Hola de nuevo. Esta voz se genero despues de matar el server a mano."
 
@@ -264,7 +265,7 @@ def read_chat_sse(ctx: Ctx, message: str, who_answers: str, chat_room: str, time
         "error": None,
         "persona": None,
     }
-    first_wav: bytes | None = None
+    wav_chunks: list[bytes] = []
     body = {"message": message, "who_answers": who_answers, "chat_room": chat_room}
     try:
         with ctx.http.stream(
@@ -299,8 +300,8 @@ def read_chat_sse(ctx: Ctx, message: str, who_answers: str, chat_room: str, time
                     except (binascii.Error, ValueError):
                         raw = b""
                     info["audio_bytes"] += len(raw)
-                    if first_wav is None and raw:
-                        first_wav = raw
+                    if raw:
+                        wav_chunks.append(raw)
                 elif etype == "error":
                     info["error"] = str(ev.get("message"))
                 elif etype == "complete":
@@ -311,10 +312,18 @@ def read_chat_sse(ctx: Ctx, message: str, who_answers: str, chat_room: str, time
         return "FAIL", {"note": f"timeout esperando complete tras {timeout_s:.0f} s", **info}
     except httpx.HTTPError as exc:
         return "FAIL", {"note": f"error de red en el stream SSE: {exc}", **info}
-    if first_wav:
+    if wav_chunks:
         wav_path = RESULTS_DIR / out_name
-        wav_path.write_bytes(first_wav)
+        segments = []
+        rate = 24000
+        for blob in wav_chunks:
+            data, sr = sf.read(io.BytesIO(blob), dtype="float32")
+            segments.append(data)
+            rate = int(sr)
+        full = np.concatenate(segments)
+        sf.write(str(wav_path), full, rate)
         info["wav_file"] = wav_path.name
+        info["wav_duration_s"] = round(full.size / rate, 2)
         ctx.wav_files.append(str(wav_path))
     ok = (
         info["complete"]
