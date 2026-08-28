@@ -43,7 +43,6 @@ DEFAULTS: dict = {
     "max_persona_replies": 2,
     "persona_name_mentions": True,
     "max_context_turns": 5,
-    "echo_chamber": False,
     "save_history": True,
     "save_audio": True,
 }
@@ -73,7 +72,6 @@ SPECS: dict[str, KeySpec] = {
     "max_persona_replies": KeySpec("int", 1, 5),
     "persona_name_mentions": KeySpec("bool"),
     "max_context_turns": KeySpec("int", 0, 50),
-    "echo_chamber": KeySpec("bool"),
     "save_history": KeySpec("bool"),
     "save_audio": KeySpec("bool"),
 }

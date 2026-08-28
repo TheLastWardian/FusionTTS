@@ -31,7 +31,6 @@ ALL_KEYS = {
     "max_persona_replies",
     "persona_name_mentions",
     "max_context_turns",
-    "echo_chamber",
     "save_history",
     "save_audio",
 }
@@ -73,9 +72,9 @@ def test_post_config_valid_updates_and_persists(client, tmp_path):
 
 
 def test_post_config_bool(client):
-    r = client.post("/api/config", json={"key": "echo_chamber", "value": True})
+    r = client.post("/api/config", json={"key": "save_history", "value": False})
     assert r.status_code == 200
-    assert r.json() == {"key": "echo_chamber", "value": True}
+    assert r.json() == {"key": "save_history", "value": False}
 
 
 def test_post_config_null_seed(client):

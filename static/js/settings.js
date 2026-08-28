@@ -33,7 +33,6 @@ const FIELDS = [
       { key: "max_persona_replies", type: "range", min: 1, max: 5, step: 1, kind: "int", label: "Max replies" },
       { key: "max_context_turns", type: "range", min: 0, max: 50, step: 1, kind: "int", label: "Context turns" },
       { key: "persona_name_mentions", type: "toggle", label: "Menciones por nombre" },
-      { key: "echo_chamber", type: "toggle", label: "Echo chamber" },
     ],
   },
   {

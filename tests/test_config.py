@@ -30,7 +30,6 @@ ALL_KEYS = {
     "max_persona_replies",
     "persona_name_mentions",
     "max_context_turns",
-    "echo_chamber",
     "save_history",
     "save_audio",
 }
@@ -223,6 +222,6 @@ def test_invalid_persisted_value_falls_back_to_default(tmp_path, monkeypatch):
 
 
 def test_set_persists_immediately(store, tmp_path):
-    store.set("echo_chamber", True)
+    store.set("save_audio", False)
     data = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
-    assert data["echo_chamber"] is True
+    assert data["save_audio"] is False
