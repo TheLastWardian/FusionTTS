@@ -8,7 +8,6 @@ import subprocess
 import sys
 import time
 import urllib.request
-import webbrowser
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 APP_PYTHON = os.path.join(BASE, "venv", "Scripts", "python.exe")
@@ -146,11 +145,6 @@ def main():
         sys.exit(1)
 
     print(f"  App lista: {APP_URL}")
-    try:
-        webbrowser.open(APP_URL)
-    except Exception:
-        pass
-
     print()
     print("  CTRL+C = APAGAR TODO")
     print("  CERRAR LA VENTANA = APAGAR TODO")
