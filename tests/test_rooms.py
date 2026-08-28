@@ -89,6 +89,31 @@ def test_create_room_duplicate_409(client):
     assert "test" in r.json()["detail"]
 
 
+@pytest.mark.parametrize("reserved", ["main", "default", "Main", "DEFAULT"])
+def test_create_room_reserved_name_409(client, reserved):
+    seed_persona(client, "Jean")
+    r = client.post(
+        "/api/rooms",
+        json={"name": reserved, "persona_names": ["Jean"], "echo_chamber": False},
+    )
+    assert r.status_code == 409
+    assert "reserved" in r.json()["detail"]
+
+
+def test_update_room_to_reserved_name_409(client):
+    seed_persona(client, "Jean")
+    client.post(
+        "/api/rooms",
+        json={"name": "test", "persona_names": ["Jean"], "echo_chamber": False},
+    )
+    r = client.put(
+        "/api/rooms/test",
+        json={"name": "default", "persona_names": ["Jean"], "echo_chamber": False},
+    )
+    assert r.status_code == 409
+    assert "reserved" in r.json()["detail"]
+
+
 def test_update_room(client):
     seed_persona(client, "Jean")
     seed_persona(client, "Fischl")

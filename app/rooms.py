@@ -24,6 +24,13 @@ class RoomExistsError(Exception):
     pass
 
 
+class RoomNameReservedError(Exception):
+    pass
+
+
+RESERVED_NAMES = frozenset({"main", "default"})
+
+
 class RoomConfigStore:
     def __init__(
         self,
@@ -135,6 +142,8 @@ class RoomConfigStore:
             label = loc if loc else "room"
             raise ValueError(f"invalid {label}: {err['msg']}") from exc
         validate_room_name(data["name"])
+        if data["name"].lower() in RESERVED_NAMES:
+            raise RoomNameReservedError(f"room name is reserved: {data['name']}")
         if self.personas is not None:
             missing = [n for n in data["persona_names"] if self.personas.get(n) is None]
             if missing:
