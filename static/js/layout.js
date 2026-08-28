@@ -24,6 +24,8 @@ function restore() {
     const r = clamp(raw.right, LIMITS.wide.right);
     if (l !== undefined) state.layout.left = l;
     if (r !== undefined) state.layout.right = r;
+    const rh = clamp(raw.roomsH, [110, 800]);
+    if (rh !== undefined) state.layout.roomsH = rh;
     state.layout.leftCollapsed = !!raw.leftCollapsed;
     state.layout.rightCollapsed = !!raw.rightCollapsed;
   } catch {
@@ -39,6 +41,7 @@ const persist = debounce(() => {
         right: state.layout.right,
         leftCollapsed: state.layout.leftCollapsed,
         rightCollapsed: state.layout.rightCollapsed,
+        roomsH: state.layout.roomsH,
       })
     );
   } catch {
@@ -49,6 +52,7 @@ function applyWidths() {
   const app = document.getElementById("app");
   app.style.setProperty("--left-w", state.layout.leftCollapsed ? "0px" : state.layout.left + "px");
   app.style.setProperty("--right-w", state.layout.rightCollapsed ? "0px" : state.layout.right + "px");
+  app.style.setProperty("--rooms-h", state.layout.roomsH + "px");
   app.classList.toggle("left-collapsed", state.layout.leftCollapsed);
   app.classList.toggle("right-collapsed", state.layout.rightCollapsed);
 }
@@ -167,6 +171,41 @@ function initGutter(gutter, which) {
   });
 }
 
+function initRoomsGutter() {
+  const gutter = document.getElementById("gutter-rooms");
+  if (!gutter) return;
+  gutter.addEventListener("pointerdown", (e) => {
+    if (isNarrow()) return;
+    e.preventDefault();
+    gutter.setPointerCapture(e.pointerId);
+    gutter.classList.add("active");
+    document.body.classList.add("resizing-v");
+    const left = document.getElementById("left");
+
+    const onMove = (ev) => {
+      const rect = left.getBoundingClientRect();
+      const h = Math.round(rect.bottom - ev.clientY);
+      state.layout.roomsH = Math.min(rect.height - 130, Math.max(110, h));
+      applyWidths();
+      persist();
+    };
+    const onUp = (ev) => {
+      if (gutter.hasPointerCapture && gutter.hasPointerCapture(ev.pointerId)) {
+        gutter.releasePointerCapture(ev.pointerId);
+      }
+      gutter.removeEventListener("pointermove", onMove);
+      gutter.removeEventListener("pointerup", onUp);
+      gutter.removeEventListener("pointercancel", onUp);
+      gutter.classList.remove("active");
+      document.body.classList.remove("resizing-v");
+      persist();
+    };
+    gutter.addEventListener("pointermove", onMove);
+    gutter.addEventListener("pointerup", onUp);
+    gutter.addEventListener("pointercancel", onUp);
+  });
+}
+
 export function initLayout() {
   restore();
   applyWidths();
@@ -180,6 +219,7 @@ export function initLayout() {
 
   initGutter(document.getElementById("gutter-left"), "left");
   initGutter(document.getElementById("gutter-right"), "right");
+  initRoomsGutter();
   document.getElementById("btn-collapse-left").addEventListener("click", () => toggleCollapsed("left"));
   document.getElementById("btn-collapse-right").addEventListener("click", () => toggleCollapsed("right"));
   document.getElementById("btn-menu").addEventListener("click", toggleLeftDrawer);

@@ -59,6 +59,7 @@ html, body { height: 100%; background: var(--bg0); font-family: var(--font); col
 body { overflow: hidden; }
 
 body.resizing, body.resizing * { cursor: col-resize !important; }
+body.resizing-v, body.resizing-v * { cursor: row-resize !important; }
 body.resizing { user-select: none; -webkit-user-select: none; }
 
 .app {
@@ -263,7 +264,28 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
 .persona-lang { font-size: 10px; color: var(--text-muted); }
 .persona-vol { font-size: 12px; color: var(--success); flex-shrink: 0; opacity: .7; }
 
-.rooms-section { border-top: 1px solid var(--border); padding: 8px 6px; }
+.rooms-section {
+  height: var(--rooms-h, 190px);
+  min-height: 110px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 4px 6px 8px;
+}
+.rooms-section:has(#room-form:not([hidden])) { height: auto; min-height: var(--rooms-h, 190px); max-height: 100%; }
+#room-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 2px; }
+.split-h {
+  height: 6px;
+  margin: 2px 8px;
+  border-radius: 3px;
+  cursor: row-resize;
+  flex-shrink: 0;
+  background: transparent;
+  transition: background .1s;
+}
+.split-h:hover { background: var(--accent-border); }
+.split-h.active { background: var(--accent); }
 .room-row { display: flex; align-items: center; gap: 2px; }
 .room-item {
   display: flex; align-items: center; gap: 7px;

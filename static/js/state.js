@@ -8,6 +8,6 @@ export const state = {
   streaming: false,
   tts: { engine: null, dispatcher: null },
   theme: "dark",
-  layout: { left: 200, right: 264, leftCollapsed: false, rightCollapsed: false },
+  layout: { left: 200, right: 264, leftCollapsed: false, rightCollapsed: false, roomsH: 190 },
   mode: "wide",
 };
