@@ -18,6 +18,7 @@ class FakeEngine:
         self.start_delay = start_delay
         self.start_calls = 0
         self.stop_calls = 0
+        self.start_error: Exception | None = None
         self.synth_calls: list[tuple[str, str, str, str | None]] = []
 
     @property
@@ -30,6 +31,8 @@ class FakeEngine:
     async def start(self) -> None:
         self.start_calls += 1
         await asyncio.sleep(self.start_delay)
+        if self.start_error is not None:
+            raise self.start_error
         self._state = "running"
 
     async def stop(self) -> None:
@@ -40,6 +43,8 @@ class FakeEngine:
         return None
 
     async def status(self) -> dict:
+        if self._state == "running":
+            return {"state": "running", "server": {"status": "ready"}}
         return {"state": self._state, "server": None}
 
     async def synthesize(
@@ -82,22 +87,22 @@ def test_01_status(client):
 
 def test_02_enable_async(client):
     c, fake = client
-    t0 = time.monotonic()
     r = c.post("/api/tts/enable")
-    elapsed = time.monotonic() - t0
     assert r.status_code == 202
     assert r.json() == {"status": "enabling"}
-    assert elapsed < 0.2
+    assert c.get("/api/config").json()["tts_enabled"] is False
     deadline = time.monotonic() + 3.0
     data = {}
+    enabled = False
     while time.monotonic() < deadline:
         data = c.get("/api/tts/status").json()
-        if data["engine"]["state"] == "running":
+        enabled = c.get("/api/config").json()["tts_enabled"] is True
+        if data["engine"]["state"] == "running" and enabled:
             break
         time.sleep(0.05)
     assert data["engine"]["state"] == "running"
     assert fake.start_calls == 1
-    assert c.get("/api/config").json()["tts_enabled"] is True
+    assert enabled is True
 
 
 def test_03_disable(client):
@@ -201,3 +206,16 @@ def test_10_speak_with_persona(client, tmp_path):
     assert r.status_code == 200
     assert r.content == b"FAKEWAV"
     assert fake.synth_calls[-1] == ("hola", expected_b64, "hola mundo", "es")
+
+
+def test_11_enable_start_failure_stays_disabled(client):
+    c, fake = client
+    fake.start_error = Exception("boom")
+    r = c.post("/api/tts/enable")
+    assert r.status_code == 202
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline and fake.start_calls < 1:
+        time.sleep(0.05)
+    assert fake.start_calls == 1
+    assert c.get("/api/config").json()["tts_enabled"] is False
+    assert c.get("/api/tts/status").json()["engine"]["state"] != "running"

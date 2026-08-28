@@ -103,6 +103,25 @@ def _load_model_impl():
     return m
 
 
+def _warmup_model_impl():
+    """Generacion dummy para calentar kernels CUDA y el camino de inferencia.
+    Mismo patron que F5-TTS (tts_worker.load_model): 'ready' implica caliente,
+    para que la primera oracion real no pague la inicializacion."""
+    logger.info("Warmup: generacion dummy ...")
+    _model.generate(
+        "warming up.",
+        language=None,
+        instruct=None,
+        duration=None,
+        speed=DEFAULT_SPEED,
+        voice_clone_prompt=None,
+        num_step=DEFAULT_NUM_STEPS,
+        guidance_scale=3.0,
+    )
+    _release_memory()
+    logger.info("Warmup completo.")
+
+
 def _unload_model_impl():
     """Libera el modelo, la caché de prompts y la memoria."""
     global _model
@@ -277,6 +296,7 @@ def load():
         _status = "loading"
     try:
         _load_model_impl()
+        _warmup_model_impl()
     except Exception as e:
         with _state_cond:
             if _status == "loading":

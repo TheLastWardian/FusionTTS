@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import Coroutine
 from typing import Any
 
@@ -7,6 +8,8 @@ from fastapi.responses import JSONResponse, Response
 
 from app.schemas import SpeakRequest
 from app.services.tts.engine import TTSError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["tts"])
 
@@ -36,13 +39,24 @@ async def status(request: Request) -> dict:
     }
 
 
+async def _start_and_arm(state) -> None:
+    try:
+        await state.tts_engine.start()
+    except Exception as exc:
+        logger.warning("tts engine no pudo arrancar: %s", exc)
+        return
+    state.config.set("tts_enabled", True)
+
+
 @router.post("/enable")
 async def enable(request: Request) -> JSONResponse:
     state = _state(request)
-    state.config.set("tts_enabled", True)
-    if (await state.tts_engine.status())["state"] == "running":
+    status = await state.tts_engine.status()
+    server = status.get("server") or {}
+    if status["state"] == "running" and server.get("status") == "ready":
+        state.config.set("tts_enabled", True)
         return JSONResponse({"status": "already"})
-    _spawn(state.tts_engine.start())
+    _spawn(_start_and_arm(state))
     return JSONResponse({"status": "enabling"}, status_code=202)
 
 
