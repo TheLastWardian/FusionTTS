@@ -692,7 +692,7 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
   border-radius: var(--radius); padding: 7px 9px; outline: none;
 }
 .pm-input:focus, .pm-textarea:focus { border-color: var(--accent-border); }
-.pm-textarea { min-height: 64px; resize: vertical; }
+.pm-textarea { min-height: 88px; resize: vertical; }
 .pm-textarea.tall { min-height: 110px; }
 .pm-text { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
 .pm-color { display: flex; align-items: center; gap: 8px; }
