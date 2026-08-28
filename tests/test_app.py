@@ -13,6 +13,7 @@ ALL_KEYS = {
     "llm_top_p",
     "llm_max_tokens",
     "tts_enabled",
+    "tts_mode",
     "tts_engine",
     "tts_num_steps",
     "tts_guidance_scale",

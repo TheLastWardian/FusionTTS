@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 
 from app import paths
 from app.main import app
+from app.routers.chat import _drain_sentences
 from app.services.llm import LLMClient
 from test_chat import MockLLM, make_persona, parse_events
 from test_tts_router import FakeEngine
@@ -221,6 +222,95 @@ def test_chat_cancel_stops_dispatcher(client):
     assert "done" in types
     assert events[-1] == {"type": "complete", "cancelled": True}
     assert state.dispatcher.is_stopped() is True
+
+
+def test_chat_tts_live_audio_interleaved(client):
+    # audio en vivo: el primer chunk suena mientras la ronda sigue
+    # generando (antes del done de la segunda persona), no al final
+    c, mock_llm, fake = client
+    assert (
+        c.post("/api/config", json={"key": "max_persona_replies", "value": 2}).status_code
+        == 200
+    )
+    assert c.post("/api/config", json={"key": "tts_enabled", "value": True}).status_code == 200
+    text1 = (
+        "Primera respuesta de la primera persona. Tiene varias oraciones para el TTS. "
+        "Y esta es la última oración de esta respuesta."
+    )
+    text2 = "Segunda respuesta de la otra persona. Con otra oración. Y finaliza aquí."
+    w1 = text1.split(" ")
+    w2 = text2.split(" ")
+    mock_llm.stream_responses = [
+        [w1[0]] + [f" {w}" for w in w1[1:]],
+        [w2[0]] + [f" {w}" for w in w2[1:]],
+    ]
+    mock_llm.pace = 0.01
+    resp = c.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": "random", "chat_room": "test"},
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    types = [e["type"] for e in events]
+    assert "error" not in types
+    starts = [e for e in events if e["type"] == "start"]
+    dones = [i for i, e in enumerate(events) if e["type"] == "done"]
+    assert len(starts) == 2
+    assert len(dones) == 2
+    first_audio = next(i for i, e in enumerate(events) if e["type"] == "audio_chunk")
+    assert first_audio < dones[1]
+    assert events[-1] == {"type": "complete", "cancelled": False}
+    # los chunks de cada persona llevan el message_id de su propio start
+    by_msg = {s["message_id"]: 0 for s in starts}
+    for e in events:
+        if e["type"] == "audio_chunk":
+            by_msg[e["message_id"]] = by_msg.get(e["message_id"], 0) + 1
+    assert all(v >= 1 for v in by_msg.values())
+
+
+def test_drain_sentences_por_oracion_sin_merge():
+    # semantica TalkWithMe: cada oracion es una unidad; el fragmento sin
+    # terminal se queda en el buffer
+    assert _drain_sentences("Hola mundo.") == (["Hola mundo."], "")
+    assert _drain_sentences("Sin terminal") == ([], "Sin terminal")
+    ready, rest = _drain_sentences("Hola mundo. ¿Qué tal? Bien")
+    assert ready == ["Hola mundo.", "¿Qué tal?"]
+    assert rest == " Bien"
+    # puntuacion corrida se consume entera con su oracion
+    ready, rest = _drain_sentences("Uno. Dos... Tres!")
+    assert ready == ["Uno.", "Dos...", "Tres!"]
+    assert rest == ""
+    # paridad con TalkWithMe: las abreviaturas cortan (no hay lista)
+    assert _drain_sentences("Mr. Smith va.") == (["Mr.", "Smith va."], "")
+
+
+def test_chat_tts_per_sentence_units(client):
+    # sin merge: cada oracion va a su propia sintesis (el merge de 120
+    # chars es donde el modelo saltaba tramos a mitad de audio)
+    c, mock_llm, fake = client
+    assert (
+        c.post("/api/config", json={"key": "max_persona_replies", "value": 1}).status_code
+        == 200
+    )
+    assert c.post("/api/config", json={"key": "tts_enabled", "value": True}).status_code == 200
+    text = "Primera oración. Segunda oración. Tercera oración."
+    words = text.split(" ")
+    mock_llm.stream_responses = [[words[0]] + [f" {w}" for w in words[1:]]]
+    resp = c.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": "random", "chat_room": "test"},
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    assert "error" not in [e["type"] for e in events]
+
+    calls = [t for t, _, _, _ in fake.synth_calls]
+    assert calls == ["Primera oración.", "Segunda oración.", "Tercera oración."]
+
+    chunks = [e for e in events if e["type"] == "audio_chunk"]
+    # cada chunk lleva el texto de su oracion (para el boton de play)
+    assert [e["text"] for e in chunks] == calls
+    assert all(e["audio"] == FAKE_AUDIO_B64 for e in chunks)
 
 
 def test_chat_tts_full_mode_chunks(client):

@@ -1,13 +1,16 @@
 // chat.js — flujo de chat: envío POST /api/chat, streaming SSE, burbujas usuario/persona, cancel.
 import { state } from "./state.js";
 import { initials, toast, avatarCss } from "./utils.js";
-import { feedAudioChunk, onTTSEvent, replayTTS, ttsReady } from "./tts.js";
+import { feedAudioChunk, onTTSEvent, playChunkB64, replayTTS, setActiveTTSMessage, ttsReady } from "./tts.js";
 
 let initialized = false;
 let ta = null;
 let btnSend = null;
 let messagesEl = null;
 let current = null;
+// burbujas por message_id: el audio de una oracion puede llegar cuando
+// current ya apunta a la siguiente persona (la sintesis va atrasada)
+let messageBubbles = new Map();
 
 function removeEmptyState() {
   const es = messagesEl.querySelector(".empty-state");
@@ -83,7 +86,40 @@ function startPersonaBubble(name) {
   msg.append(av, body);
   messagesEl.appendChild(msg);
   scrollBottom();
-  return { rootEl: msg, bodyEl: body, textEl, dots, cursor, persona: name, final: false };
+  return {
+    rootEl: msg,
+    bodyEl: body,
+    textEl,
+    dots,
+    cursor,
+    persona: name,
+    final: false,
+    messageId: null,
+    sounds: [],
+    soundsEl: null,
+  };
+}
+
+// boton de play por oracion (como TalkWithMe): reproduce el audio que ya
+// llego por SSE, sin volver a sintetizar
+function addSentenceSound(b, ev) {
+  if (!ev.audio) return;
+  b.sounds.push(ev);
+  if (!b.soundsEl) {
+    b.soundsEl = document.createElement("div");
+    b.soundsEl.className = "msg-sounds";
+    b.bodyEl.appendChild(b.soundsEl);
+  }
+  const btn = document.createElement("button");
+  btn.className = "msg-sound-btn";
+  btn.title = ev.text || "Oración";
+  btn.setAttribute("aria-label", "Reproducir oración: " + (ev.text || ""));
+  const ico = document.createElement("i");
+  ico.className = "ti ti-player-play";
+  btn.appendChild(ico);
+  const b64 = ev.audio;
+  btn.addEventListener("click", () => playChunkB64(b64));
+  b.soundsEl.appendChild(btn);
 }
 
 function appendToken(b, token) {
@@ -148,6 +184,8 @@ function finalizeBubble(b, fullText) {
 function finishStream() {
   finalizeBubble(current, null);
   current = null;
+  messageBubbles.clear();
+  setActiveTTSMessage(null);
   state.streaming = false;
   updateSendButton();
 }
@@ -155,6 +193,9 @@ function finishStream() {
 function onEvent(ev) {
   if (ev.type === "start") {
     current = startPersonaBubble(ev.persona);
+    current.messageId = ev.message_id;
+    messageBubbles.set(ev.message_id, current);
+    setActiveTTSMessage(ev.message_id);
   } else if (ev.type === "token") {
     appendToken(current, ev.token);
   } else if (ev.type === "done") {
@@ -162,6 +203,8 @@ function onEvent(ev) {
     current = null;
   } else if (ev.type === "audio_chunk") {
     feedAudioChunk(ev);
+    const b = messageBubbles.get(ev.message_id);
+    if (b) addSentenceSound(b, ev);
   } else if (ev.type === "tts_state") {
     onTTSEvent(ev);
   } else if (ev.type === "error") {

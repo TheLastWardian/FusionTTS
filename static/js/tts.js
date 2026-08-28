@@ -10,6 +10,30 @@ let currentSrc = null;
 let audioHinted = false;
 let gen = 0;
 let decodeSeq = Promise.resolve();
+let activeMessageId = null;
+let chunksOk = 0;
+let chunksDropped = 0;
+
+function updateChipDebug() {
+  const chip = document.getElementById("tts-chip");
+  if (chip)
+    chip.title = `TTS · ok: ${chunksOk} · descartados: ${chunksDropped} · cola: ${player ? player.pendingCount : 0}`;
+}
+
+// id del mensaje cuyo audio puede sonar (modelo F5-TTS currentTtsMsgId):
+// un chunk de otro mensaje nunca se encola.
+export function setActiveTTSMessage(id) {
+  if (activeMessageId) {
+    console.info(`[tts] fin de mensaje (msg ${String(activeMessageId).slice(0, 8)}): ok ${chunksOk} · descartados ${chunksDropped}`);
+  }
+  console.info("[tts] activeMessageId →", id ? String(id).slice(0, 8) : null);
+  if (!id) {
+    chunksOk = 0;
+    chunksDropped = 0;
+  }
+  activeMessageId = id;
+  updateChipDebug();
+}
 
 export function ttsReady() {
   const e = state.tts && state.tts.engine;
@@ -24,8 +48,17 @@ function ensureCtx() {
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   player = new FTTS.AudioQueue({
     gap: 80,
-    onPlay: scheduleSource,
-    onDrain: () => {},
+    onPlay: (buf) => {
+      console.info(
+        `[tts] ▶ suena ${Math.round(buf.duration * 100) / 100}s · cola pendiente: ${player.pendingCount}`
+      );
+      updateChipDebug();
+      scheduleSource(buf);
+    },
+    onDrain: () => {
+      console.info("[tts] cola vacía (playback terminado)");
+      updateChipDebug();
+    },
   });
   ctx.resume();
   if (ctx.state === "suspended" && !audioHinted) {
@@ -55,6 +88,7 @@ function base64ToBytes(b64) {
 }
 
 function stopLocal() {
+  console.warn(`[tts] stopLocal: detengo fuente y vacío la cola (pendientes: ${player ? player.pendingCount : 0})`);
   gen++;
   if (currentSrc) {
     try {
@@ -62,34 +96,74 @@ function stopLocal() {
     } catch {}
   }
   if (player) player.stop();
+  updateChipDebug();
 }
 
 function decodeAndEnqueue(arrayBuffer) {
   const g = gen;
+  const t0 = performance.now();
   const job = decodeSeq.then(async () => {
-    if (g !== gen) return;
+    if (g !== gen) {
+      console.warn("[tts] decode obsoleto: gen cambió antes de decodificar");
+      return;
+    }
     const buf = await ctx.decodeAudioData(arrayBuffer);
     if (g !== gen) return;
+    console.info(
+      `[tts] decodificado ${Math.round(buf.duration * 100) / 100}s en ${Math.round(performance.now() - t0)}ms → cola`
+    );
     player.enqueue(buf);
   });
   decodeSeq = job.catch((err) => {
-    console.warn("tts.js: no se pudo decodificar el audio:", err && err.message ? err.message : err);
+    console.warn("[tts] no se pudo decodificar el audio:", err && err.message ? err.message : err);
   });
 }
 
 export function feedAudioChunk(ev) {
-  if (!ttsReady()) return;
+  if (!ttsReady()) {
+    console.warn("[tts] chunk ignorado: ttsReady() false (oración", ev.sentence_id + ")");
+    return;
+  }
+  // Sin filtro por message_id: la cola es FIFO y el orden de llegada = orden
+  // de sintesis = orden conversacional (todo el msg 1, luego el msg 2). El
+  // filtro antiguo tiraba la cola de la persona anterior mientras su audio
+  // seguia sintetizandose (truncaba el mensaje a 1-2 oraciones).
   ensureCtx();
   try {
-    decodeAndEnqueue(base64ToBytes(ev.audio).buffer);
+    const bytes = base64ToBytes(ev.audio);
+    chunksOk++;
+    console.info(
+      `[tts] chunk ${ev.sentence_id} ok (msg ${String(ev.message_id || "-").slice(0, 8)}, ${bytes.length} bytes) → decodificar`
+    );
+    updateChipDebug();
+    decodeAndEnqueue(bytes.buffer);
   } catch (err) {
     console.warn("tts.js: base64 inválido en audio_chunk:", err && err.message ? err.message : err);
   }
 }
 
+// Reproduce una oracion desde su base64 ya descargado (botones por oracion):
+// no re-sintetiza, suena al instante por la misma cola de decodificacion.
+export function playChunkB64(b64) {
+  if (!ttsReady()) {
+    toast("TTS no está activo", "error");
+    return;
+  }
+  console.info(`[tts] botón de oración: ${b64.length} chars b64 → decodificar`);
+  ensureCtx();
+  try {
+    decodeAndEnqueue(base64ToBytes(b64).buffer);
+  } catch (err) {
+    console.warn("tts.js: base64 inválido en playChunkB64:", err && err.message ? err.message : err);
+  }
+}
+
 export function onTTSEvent(ev) {
+  console.info("[tts] tts_state:", ev.state, ev.failed !== undefined ? `(failed=${ev.failed})` : "");
   if (ev.state === "on") ensureCtx();
   else if (ev.state === "stopped") stopLocal();
+  else if (ev.state === "error")
+    toast(`TTS: ${ev.failed ?? "?"} oración(es) no se pudieron sintetizar`, "error");
 }
 
 export async function replayTTS(text, persona) {
@@ -97,6 +171,7 @@ export async function replayTTS(text, persona) {
     toast("TTS no está activo", "error");
     return false;
   }
+  console.info(`[tts] replay burbuja (${persona}): ${text.length} chars → /api/tts/speak`);
   try {
     const res = await fetch("/api/tts/speak", {
       method: "POST",

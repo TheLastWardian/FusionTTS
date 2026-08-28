@@ -16,6 +16,7 @@ class TTSChunk:
     sentence_id: int
     message_id: str
     persona: str
+    text: str
     audio: bytes
     sample_rate: int
 
@@ -26,14 +27,16 @@ class TTSDispatcher:
         engine: TTSEngine,
         personas: PersonaStore,
         config: ConfigStore,
-        work_queue_max: int = 8,
-        audio_queue_max: int = 32,
     ) -> None:
         self._engine = engine
         self._personas = personas
         self._config = config
-        self._work_q: asyncio.Queue = asyncio.Queue(maxsize=work_queue_max)
-        self._audio_q: asyncio.Queue = asyncio.Queue(maxsize=audio_queue_max)
+        # Cajas sin límite (modelo F5-TTS): meter una oración (~200 B) o un
+        # chunk nunca bloquea al que envía; la caja absorbe la brecha de
+        # velocidad entre el LLM y la síntesis.
+        self._work_q: asyncio.Queue = asyncio.Queue()
+        self._audio_q: asyncio.Queue = asyncio.Queue()
+        self._fail_q: asyncio.Queue = asyncio.Queue()
         self._worker_task: asyncio.Task | None = None
         self._pause_event = asyncio.Event()
         self._pause_event.set()
@@ -42,6 +45,14 @@ class TTSDispatcher:
         self._inflight_task: asyncio.Task | None = None
         self._in_flight = False
         self._sentence_counter = -1
+        # Contabilidad de entrega (modelo F5-TTS is_idle): la ronda termina
+        # solo cuando cada oración encolada produjo audio en _audio_q o fue
+        # contada como perdida. _completed crece DESPUÉS del put en
+        # _audio_q, cerrando la vieja carrera de is_idle (el in_flight se
+        # limpiaba antes de que el último chunk entrara a la caja).
+        self._total = 0
+        self._completed = 0
+        self._failed = 0
         self._persona_cache: dict[str, tuple[str, str, str | None]] = {}
 
     async def start(self) -> None:
@@ -59,6 +70,7 @@ class TTSDispatcher:
             if item is None:
                 continue
             if self._stopped:
+                self._count_failed(item[0], "stop", notify=False)
                 continue
             await self._process(item)
 
@@ -67,10 +79,7 @@ class TTSDispatcher:
         self._pause_event.set()
         if self._inflight_task is not None and not self._inflight_task.done():
             self._inflight_task.cancel()
-        try:
-            self._work_q.put_nowait(None)
-        except asyncio.QueueFull:
-            pass
+        self._work_q.put_nowait(None)
         try:
             if self._worker_task is not None:
                 self._worker_task.cancel()
@@ -93,7 +102,8 @@ class TTSDispatcher:
         if self._worker_task is None:
             raise TTSError("dispatcher sin worker")
         self._sentence_counter += 1
-        await self._work_q.put((self._sentence_counter, sentence, message_id, persona))
+        self._total += 1
+        self._work_q.put_nowait((self._sentence_counter, sentence, message_id, persona))
 
     async def _process(self, item: tuple[int, str, str, str]) -> None:
         sentence_id, sentence, message_id, persona = item
@@ -105,16 +115,39 @@ class TTSDispatcher:
         try:
             result = await self._inflight_task
         except asyncio.CancelledError:
+            self._count_failed(sentence_id, "cancelada", notify=False)
             return
         except TTSError as exc:
-            logger.warning("tts sentence %s fallida: %s", sentence_id, exc)
+            self._count_failed(sentence_id, str(exc), notify=True)
             return
         finally:
             self._in_flight = False
             self._inflight_task = None
         await self._audio_q.put(
-            TTSChunk(sentence_id, message_id, persona, result.audio, result.sample_rate)
+            TTSChunk(sentence_id, message_id, persona, sentence, result.audio, result.sample_rate)
         )
+        self._completed += 1
+
+    def _count_failed(self, sentence_id: int, reason: str, notify: bool) -> None:
+        # Fail-loud (modelo F5-TTS): cada oración perdida se cuenta y se
+        # loguea; las fallas de síntesis reales además notifican al cliente.
+        self._failed += 1
+        logger.warning(
+            "tts sentence %s perdida (%s); fallidas %d/%d",
+            sentence_id,
+            reason,
+            self._failed,
+            self._total,
+        )
+        if notify:
+            self._fail_q.put_nowait(
+                {
+                    "type": "tts_state",
+                    "state": "error",
+                    "failed": self._failed,
+                    "total": self._total,
+                }
+            )
 
     async def pause(self) -> None:
         self._pause_event.clear()
@@ -131,13 +164,12 @@ class TTSDispatcher:
             self._inflight_task.cancel()
         while True:
             try:
-                self._work_q.get_nowait()
+                item = self._work_q.get_nowait()
             except asyncio.QueueEmpty:
                 break
-        try:
-            self._work_q.put_nowait(None)
-        except asyncio.QueueFull:
-            pass
+            if item is not None:
+                self._count_failed(item[0], "stop", notify=False)
+        self._work_q.put_nowait(None)
         while True:
             try:
                 self._audio_q.get_nowait()
@@ -145,10 +177,35 @@ class TTSDispatcher:
                 break
 
     def reset(self) -> None:
+        # Nueva ronda (modelo F5-TTS reset): limpia cajas con restos y
+        # contadores; el audio viejo de un mensaje cancelado no filtra a la
+        # siguiente (los chunks llevan message_id y la caja se vacía).
         self._stopped = False
+        while True:
+            try:
+                self._work_q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        while True:
+            try:
+                self._audio_q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        while True:
+            try:
+                self._fail_q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        self._total = 0
+        self._completed = 0
+        self._failed = 0
 
     def is_idle(self) -> bool:
-        return self._work_q.empty() and not self._in_flight
+        return (
+            self._work_q.empty()
+            and not self._in_flight
+            and self._total == self._completed + self._failed
+        )
 
     async def wait_until_done(self) -> None:
         while not self._shutting_down:
@@ -161,6 +218,12 @@ class TTSDispatcher:
 
     def audio_empty(self) -> bool:
         return self._audio_q.empty()
+
+    async def wait_failure(self) -> dict:
+        return await self._fail_q.get()
+
+    def fail_empty(self) -> bool:
+        return self._fail_q.empty()
 
     def is_stopped(self) -> bool:
         return self._stopped

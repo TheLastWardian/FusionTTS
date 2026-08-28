@@ -20,6 +20,8 @@ class FakeEngine:
         self.delay = delay
         self.calls: list[tuple[str, str, str, str | None]] = []
         self.cancelled = 0
+        self.fail: Exception | None = None
+        self.fail_texts: set[str] = set()
 
     @property
     def count(self) -> int:
@@ -35,6 +37,10 @@ class FakeEngine:
         abort_event: asyncio.Event | None = None,
     ) -> TTSResult:
         self.calls.append((text, audio_base64, prompt_text, language))
+        if self.fail is not None:
+            raise self.fail
+        if text in self.fail_texts:
+            raise TTSError(f"falla programada: {text}")
         try:
             await asyncio.sleep(self.delay)
         except asyncio.CancelledError:
@@ -164,17 +170,20 @@ async def test_07_orden_y_sentence_id(make_dispatcher, env):
     assert [call[0] for call in engine.calls] == ["s0", "s1", "s2"]
 
 
-async def test_08_backpressure(make_dispatcher):
+async def test_08_no_backpressure(make_dispatcher, env):
+    # cajas sin límite (modelo F5-TTS): encolar nunca espera al engine,
+    # aunque el engine sea lento y la caja se llene
+    env[1].create(_persona_dict("P1"))
     engine = FakeEngine(delay=0.4)
-    d = make_dispatcher(engine, work_queue_max=1)
+    d = make_dispatcher(engine)
     await d.start()
-    await d.enqueue("s0", "M", "P1")
-    await asyncio.sleep(0.05)
-    await d.enqueue("s1", "M", "P1")
     t0 = time.monotonic()
-    await d.enqueue("s2", "M", "P1")
+    for i in range(4):
+        await d.enqueue(f"s{i}", "M", "P1")
     elapsed = time.monotonic() - t0
-    assert elapsed >= 0.25
+    assert elapsed < 0.1
+    chunks = [await asyncio.wait_for(d.wait_audio(), 5.0) for _ in range(4)]
+    assert [c.sentence_id for c in chunks] == [0, 1, 2, 3]
 
 
 async def test_09_pausa_conserva_cola(make_dispatcher, env):
@@ -347,3 +356,77 @@ async def test_17_shutdown_limpo(make_dispatcher):
     d2 = make_dispatcher(FakeEngine())
     with pytest.raises(TTSError):
         await d2.enqueue("y", "M", "P1")
+
+
+async def test_18_fail_loud(make_dispatcher, env):
+    # una síntesis fallida se cuenta y notifica (sin drop silencioso)
+    env[1].create(_persona_dict("P1"))
+    engine = FakeEngine()
+    engine.fail = TTSError("audio vacío")
+    d = make_dispatcher(engine)
+    await d.start()
+    await d.enqueue("s0", "M", "P1")
+    await d.enqueue("s1", "M", "P1")
+    await asyncio.wait_for(d.wait_until_done(), 2.0)
+    assert d.is_idle()
+    assert d.audio_empty()
+    ev1 = await asyncio.wait_for(d.wait_failure(), 1.0)
+    ev2 = await asyncio.wait_for(d.wait_failure(), 1.0)
+    assert [ev["state"] for ev in (ev1, ev2)] == ["error", "error"]
+    assert ev1["failed"] == 1 and ev1["total"] == 2
+    assert ev2["failed"] == 2 and ev2["total"] == 2
+    assert d.fail_empty()
+
+
+async def test_19_fail_loud_mix_ok(make_dispatcher, env):
+    # falla intercalada: las buenas llegan, la mala se cuenta y notifica
+    env[1].create(_persona_dict("P1"))
+    engine = FakeEngine(delay=0.01)
+    engine.fail_texts = {"bad1"}
+    d = make_dispatcher(engine)
+    await d.start()
+    await d.enqueue("ok0", "M", "P1")
+    await d.enqueue("bad1", "M", "P1")
+    await d.enqueue("ok2", "M", "P1")
+    await asyncio.wait_for(d.wait_until_done(), 2.0)
+    c0 = await asyncio.wait_for(d.wait_audio(), 1.0)
+    c2 = await asyncio.wait_for(d.wait_audio(), 1.0)
+    assert d.audio_empty()
+    assert [c.sentence_id for c in (c0, c2)] == [0, 2]
+    ev = await asyncio.wait_for(d.wait_failure(), 1.0)
+    assert ev["failed"] == 1 and ev["total"] == 3
+    assert d.fail_empty()
+    assert d.is_idle()
+
+
+async def test_20_wait_until_done_regresion_carrera(make_dispatcher, env):
+    # is_idle no puede ser true antes de que el último chunk entre a audio_q
+    env[1].create(_persona_dict("P1"))
+    engine = FakeEngine(delay=0.02)
+    d = make_dispatcher(engine)
+    await d.start()
+    for i in range(5):
+        await d.enqueue(f"s{i}", "M", "P1")
+    await asyncio.wait_for(d.wait_until_done(), 3.0)
+    for i in range(5):
+        chunk = await asyncio.wait_for(d.wait_audio(), 0.2)
+        assert chunk.sentence_id == i
+    assert d.audio_empty()
+
+
+async def test_21_reset_limpiacajas_y_contadores(make_dispatcher, env):
+    # reset (nueva ronda) vacía cajas y contadores; nada viejo filtra
+    env[1].create(_persona_dict("P1"))
+    engine = FakeEngine(delay=0.05)
+    d = make_dispatcher(engine)
+    await d.start()
+    await d.enqueue("vieja", "M_ANTIGUO", "P1")
+    c = await asyncio.wait_for(d.wait_audio(), 2.0)
+    assert c.message_id == "M_ANTIGUO"
+    d.reset()
+    assert d.is_idle()
+    await d.enqueue("nueva", "M_NUEVO", "P1")
+    c2 = await asyncio.wait_for(d.wait_audio(), 2.0)
+    assert c2.message_id == "M_NUEVO"
+    await d.wait_until_done()
+    assert d.audio_empty()

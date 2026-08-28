@@ -1,8 +1,10 @@
+import asyncio
 import base64
 import binascii
 import json
 import logging
 import random
+import re
 import uuid
 from typing import AsyncIterator
 
@@ -15,12 +17,7 @@ from app.services import vision
 from app.services.chat_context import build_llm_messages
 from app.services.llm import LLMError
 from app.services.persona_router import pick_persona, resolve_room_personas
-from app.services.tts.splitter import (
-    CHUNK_LEN,
-    FULL_CHUNK_LEN,
-    MIN_CHUNK_LEN,
-    chunk_text_punctuation,
-)
+from app.services.tts.splitter import FULL_CHUNK_LEN, chunk_text_punctuation
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +55,69 @@ def _find_room(state, chat_room: str) -> dict | None:
     )
 
 
+# Misma semantica que extractSentences de TalkWithMe: cada oracion que
+# cierra en .!? es una unidad TTS por si sola (sin merge de 120 chars:
+# los chunks largos son donde el modelo salta tramos a mitad de audio).
+_SENT_RE = re.compile(r"[^.!?]*[.!?]+")
+
+
 def _drain_sentences(buf: str) -> tuple[list[str], str]:
-    chunks = chunk_text_punctuation(buf, CHUNK_LEN, MIN_CHUNK_LEN)
-    if len(chunks) < 2:
-        return [], buf
-    ready, buf = chunks[:-1], chunks[-1]
-    return [s for s in (c.strip() for c in ready) if s], buf
+    ready: list[str] = []
+    last_end = 0
+    for m in _SENT_RE.finditer(buf):
+        s = m.group(0).strip()
+        if s:
+            ready.append(s)
+        last_end = m.end()
+    return ready, buf[last_end:]
+
+
+def _audio_event(chunk) -> dict:
+    return {
+        "type": "audio_chunk",
+        "persona": chunk.persona,
+        "message_id": chunk.message_id,
+        "sentence_id": chunk.sentence_id,
+        "text": chunk.text,
+        "sample_rate": chunk.sample_rate,
+        "audio": base64.b64encode(chunk.audio).decode(),
+    }
+
+
+async def _tts_pump(
+    disp, local_q: asyncio.Queue, stop_event: asyncio.Event, drained_event: asyncio.Event
+) -> None:
+    """Mueve audio y notificaciones de falla del dispatcher a local_q.
+
+    Único consumidor de audio_q/fail_q de la ronda. Sale cuando stop_event
+    está seteado y ambas cajas quedaron vacías (todo el audio ya está en
+    local_q) y señala drained_event.
+    """
+    try:
+        while True:
+            audio_f = asyncio.ensure_future(disp.wait_audio())
+            fail_f = asyncio.ensure_future(disp.wait_failure())
+            stop_f = asyncio.ensure_future(stop_event.wait())
+            try:
+                done, _ = await asyncio.wait(
+                    {audio_f, fail_f, stop_f}, return_when=asyncio.FIRST_COMPLETED
+                )
+            except BaseException:
+                for f in (audio_f, fail_f, stop_f):
+                    f.cancel()
+                raise
+            for f in done:
+                if f is audio_f:
+                    local_q.put_nowait(_audio_event(audio_f.result()))
+                elif f is fail_f:
+                    local_q.put_nowait(fail_f.result())
+            for f in (audio_f, fail_f, stop_f):
+                if not f.done():
+                    f.cancel()
+            if stop_event.is_set() and disp.audio_empty() and disp.fail_empty():
+                break
+    finally:
+        drained_event.set()
 
 
 async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
@@ -79,181 +133,230 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
 
     tts_on = bool(config.get("tts_enabled"))
     tts_mode = config.get("tts_mode")
+    local_q: asyncio.Queue | None = None
+    pump_task: asyncio.Task | None = None
+    pump_stop = asyncio.Event()
+    pump_drained = asyncio.Event()
+    finished = False
+
+    def _drain_local() -> list[str]:
+        out: list[str] = []
+        if local_q is None:
+            return out
+        while True:
+            try:
+                out.append(_sse(local_q.get_nowait()))
+            except asyncio.QueueEmpty:
+                return out
+
     if tts_on:
         state.dispatcher.reset()
+        local_q = asyncio.Queue()
+        pump_task = asyncio.create_task(
+            _tts_pump(state.dispatcher, local_q, pump_stop, pump_drained)
+        )
         yield _sse({"type": "tts_state", "state": "on"})
 
-    max_replies = min(config.get("max_persona_replies"), len(eligible))
-    room = _find_room(state, req.chat_room)
-    echo = bool(room and room.get("echo_chamber"))
-    if echo:
-        max_replies = 1
-
-    user_message_id = req.message_id or str(uuid.uuid4())
-
-    image_rel = None
-    description = None
-    if req.image_base64 and req.image_mime:
-        try:
-            image_bytes = base64.b64decode(req.image_base64, validate=True)
-        except (binascii.Error, ValueError) as exc:
-            logger.warning("chat: corrupt image base64, continuing without image: %s", exc)
-            image_bytes = None
-        if image_bytes:
-            ext = _ext_for_mime(req.image_mime)
-            image_rel = room_store.save_image(image_bytes, ext)
-            try:
-                description = await vision.describe_image(
-                    state.llm, image_bytes, ext, _VISION_INSTRUCTION
-                )
-            except Exception as exc:
-                logger.warning("chat: image description failed: %s", exc)
-                description = None
-
-    room_store.append(new_message("user", "user", req.message, image=image_rel))
-
     try:
-        first = await pick_persona(
-            req.who_answers,
-            req.message,
-            eligible,
-            state.personas,
-            state.llm,
-            config,
-            room_store.history,
-        )
-    except ValueError as exc:
-        yield _sse({"type": "error", "message": str(exc)})
-        yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
-        return
+        max_replies = min(config.get("max_persona_replies"), len(eligible))
+        room = _find_room(state, req.chat_room)
+        echo = bool(room and room.get("echo_chamber"))
+        if echo:
+            max_replies = 1
 
-    replied: list[str] = []
-    for index in range(max_replies):
-        if state.cancel_event.is_set():
-            if tts_on:
-                await state.dispatcher.stop()
-            break
-        if index == 0:
-            persona_name = first
-        else:
-            remaining = [n for n in eligible if n not in replied]
-            if not remaining:
-                break
-            persona_name = random.choice(remaining)
+        user_message_id = req.message_id or str(uuid.uuid4())
 
-        persona = state.personas.get(persona_name)
-        if persona is None:
-            yield _sse({"type": "error", "message": f"Persona {persona_name} not found"})
+        image_rel = None
+        description = None
+        if req.image_base64 and req.image_mime:
+            try:
+                image_bytes = base64.b64decode(req.image_base64, validate=True)
+            except (binascii.Error, ValueError) as exc:
+                logger.warning("chat: corrupt image base64, continuing without image: %s", exc)
+                image_bytes = None
+            if image_bytes:
+                ext = _ext_for_mime(req.image_mime)
+                image_rel = room_store.save_image(image_bytes, ext)
+                try:
+                    description = await vision.describe_image(
+                        state.llm, image_bytes, ext, _VISION_INSTRUCTION
+                    )
+                except Exception as exc:
+                    logger.warning("chat: image description failed: %s", exc)
+                    description = None
+
+        room_store.append(new_message("user", "user", req.message, image=image_rel))
+
+        try:
+            first = await pick_persona(
+                req.who_answers,
+                req.message,
+                eligible,
+                state.personas,
+                state.llm,
+                config,
+                room_store.history,
+            )
+        except ValueError as exc:
+            yield _sse({"type": "error", "message": str(exc)})
             yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
             return
-        replied.append(persona_name)
-        buf = ""
 
-        # id is generated before "start" so T10 can stamp it onto every audio
-        # chunk streamed for this message (audio must resolve to the right
-        # message before the text stream even finishes)
-        assistant_message_id = str(uuid.uuid4())
-        yield _sse(
-            {
-                "type": "start",
-                "persona": persona_name,
-                "user_message_id": user_message_id,
-                "message_id": assistant_message_id,
-            }
-        )
-
-        if echo:
-            full_text = req.message
-            yield _sse({"type": "token", "persona": persona_name, "token": full_text})
-            if tts_on and tts_mode != "full":
-                ready, buf = _drain_sentences(full_text)
-                for sentence in ready:
-                    await state.dispatcher.enqueue(sentence, assistant_message_id, persona_name)
-        else:
-            messages = build_llm_messages(
-                persona.get("system_prompt", ""),
-                persona_name,
-                room_store.history,
-                config.get("max_context_turns"),
-            )
-            if index == 0 and description:
-                for message in reversed(messages):
-                    if message["role"] == "user":
-                        message["content"] += f"\n\n[Attached image description: {description}]"
-                        break
-            full_text = ""
-            try:
-                async for token in state.llm.stream_chat(messages, state.cancel_event):
-                    full_text += token
-                    yield _sse(
-                        {"type": "token", "persona": persona_name, "token": token}
-                    )
-                    # "full": se encola el texto completo al terminar (abajo)
-                    if tts_on and tts_mode != "full":
-                        buf += token
-                        ready, buf = _drain_sentences(buf)
-                        for sentence in ready:
-                            await state.dispatcher.enqueue(
-                                sentence, assistant_message_id, persona_name
-                            )
-            except LLMError as exc:
-                if tts_on:
-                    await state.dispatcher.stop()
-                yield _sse({"type": "error", "message": str(exc)})
-                yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
-                return
+        replied: list[str] = []
+        for index in range(max_replies):
             if state.cancel_event.is_set():
                 if tts_on:
                     await state.dispatcher.stop()
-                room_store.append(new_message("assistant", persona_name, full_text))
-                yield _sse(
-                    {
-                        "type": "done",
-                        "persona": persona_name,
-                        "text": full_text,
-                        "message_id": assistant_message_id,
-                    }
-                )
                 break
+            if index == 0:
+                persona_name = first
+            else:
+                remaining = [n for n in eligible if n not in replied]
+                if not remaining:
+                    break
+                persona_name = random.choice(remaining)
 
-        room_store.append(new_message("assistant", persona_name, full_text))
-        yield _sse(
-            {
-                "type": "done",
-                "persona": persona_name,
-                "text": full_text,
-                "message_id": assistant_message_id,
-            }
-        )
-        if tts_on:
-            if tts_mode == "full":
-                for chunk in chunk_text_punctuation(full_text, FULL_CHUNK_LEN):
-                    await state.dispatcher.enqueue(
-                        chunk, assistant_message_id, persona_name
-                    )
-            elif buf.strip():
-                await state.dispatcher.enqueue(
-                    buf.strip(), assistant_message_id, persona_name
-                )
+            persona = state.personas.get(persona_name)
+            if persona is None:
+                yield _sse({"type": "error", "message": f"Persona {persona_name} not found"})
+                yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
+                return
+            replied.append(persona_name)
+            buf = ""
 
-    if tts_on:
-        await state.dispatcher.wait_until_done()
-        while not state.dispatcher.audio_empty():
-            chunk = await state.dispatcher.wait_audio()
+            # id is generated before "start" so T10 can stamp it onto every audio
+            # chunk streamed for this message (audio must resolve to the right
+            # message before the text stream even finishes)
+            assistant_message_id = str(uuid.uuid4())
             yield _sse(
                 {
-                    "type": "audio_chunk",
-                    "persona": chunk.persona,
-                    "message_id": chunk.message_id,
-                    "sentence_id": chunk.sentence_id,
-                    "sample_rate": chunk.sample_rate,
-                    "audio": base64.b64encode(chunk.audio).decode(),
+                    "type": "start",
+                    "persona": persona_name,
+                    "user_message_id": user_message_id,
+                    "message_id": assistant_message_id,
                 }
             )
-        if state.dispatcher.is_stopped():
-            yield _sse({"type": "tts_state", "state": "stopped"})
 
-    yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
+            if echo:
+                full_text = req.message
+                yield _sse({"type": "token", "persona": persona_name, "token": full_text})
+                if tts_on and tts_mode != "full":
+                    ready, buf = _drain_sentences(full_text)
+                    for sentence in ready:
+                        await state.dispatcher.enqueue(sentence, assistant_message_id, persona_name)
+                for ev in _drain_local():
+                    yield ev
+            else:
+                messages = build_llm_messages(
+                    persona.get("system_prompt", ""),
+                    persona_name,
+                    room_store.history,
+                    config.get("max_context_turns"),
+                )
+                if index == 0 and description:
+                    for message in reversed(messages):
+                        if message["role"] == "user":
+                            message["content"] += f"\n\n[Attached image description: {description}]"
+                            break
+                full_text = ""
+                try:
+                    async for token in state.llm.stream_chat(messages, state.cancel_event):
+                        full_text += token
+                        yield _sse(
+                            {"type": "token", "persona": persona_name, "token": token}
+                        )
+                        # "full": se encola el texto completo al terminar (abajo)
+                        if tts_on and tts_mode != "full":
+                            buf += token
+                            ready, buf = _drain_sentences(buf)
+                            for sentence in ready:
+                                await state.dispatcher.enqueue(
+                                    sentence, assistant_message_id, persona_name
+                                )
+                        # audio en vivo: el pump ya movió chunks a local_q;
+                        # el texto nunca espera por el TTS
+                        for ev in _drain_local():
+                            yield ev
+                except LLMError as exc:
+                    if tts_on:
+                        await state.dispatcher.stop()
+                    yield _sse({"type": "error", "message": str(exc)})
+                    yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
+                    return
+                if state.cancel_event.is_set():
+                    if tts_on:
+                        await state.dispatcher.stop()
+                    room_store.append(new_message("assistant", persona_name, full_text))
+                    yield _sse(
+                        {
+                            "type": "done",
+                            "persona": persona_name,
+                            "text": full_text,
+                            "message_id": assistant_message_id,
+                        }
+                    )
+                    break
+
+            room_store.append(new_message("assistant", persona_name, full_text))
+            yield _sse(
+                {
+                    "type": "done",
+                    "persona": persona_name,
+                    "text": full_text,
+                    "message_id": assistant_message_id,
+                }
+            )
+            if tts_on:
+                if tts_mode == "full":
+                    for chunk in chunk_text_punctuation(full_text, FULL_CHUNK_LEN):
+                        await state.dispatcher.enqueue(
+                            chunk, assistant_message_id, persona_name
+                        )
+                elif buf.strip():
+                    await state.dispatcher.enqueue(
+                        buf.strip(), assistant_message_id, persona_name
+                    )
+                for ev in _drain_local():
+                    yield ev
+
+        if tts_on:
+            # contabilidad: wait_until_done solo regresa cuando cada oración
+            # produjo audio (ya en la caja) o fue contada como perdida
+            await state.dispatcher.wait_until_done()
+            pump_stop.set()
+            await pump_drained.wait()
+            pump_task.cancel()
+            try:
+                await pump_task
+            except asyncio.CancelledError:
+                pass
+            if state.dispatcher.is_stopped():
+                # stop: el audio pendiente no se emite (misma semántica de
+                # siempre: nada de audio después de un stop)
+                while True:
+                    try:
+                        local_q.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                yield _sse({"type": "tts_state", "state": "stopped"})
+            else:
+                for ev in _drain_local():
+                    yield ev
+
+        finished = True
+        yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
+    finally:
+        if tts_on and not finished:
+            try:
+                await state.dispatcher.stop()
+            except Exception:
+                logger.exception("chat: no se pudo detener el dispatcher")
+        if pump_task is not None:
+            pump_task.cancel()
+            try:
+                await pump_task
+            except asyncio.CancelledError:
+                pass
 
 
 @router.post("/chat")
