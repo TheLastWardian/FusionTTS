@@ -6,3 +6,8 @@ if not exist "venv\Scripts\python.exe" (
     exit /b 1
 )
 venv\Scripts\python.exe launcher.py
+if errorlevel 1 (
+    echo.
+    echo El launcher termino con error. Revisa los mensajes de arriba.
+    pause
+)
