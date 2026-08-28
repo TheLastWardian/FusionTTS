@@ -131,7 +131,7 @@ export async function initRooms() {
       cb.value = p.name;
       const s = document.createElement("span");
       s.textContent = p.name;
-      label.append(cb, s);
+      label.append(s, cb);
       checksEl.appendChild(label);
     }
   };
@@ -231,7 +231,7 @@ function buildRoomChecks(container, checkedNames) {
     if (checkedNames.includes(p.name)) cb.checked = true;
     const s = document.createElement("span");
     s.textContent = p.name;
-    label.append(cb, s);
+    label.append(s, cb);
     container.appendChild(label);
   }
 }
