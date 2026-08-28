@@ -44,7 +44,17 @@ function roomRow(r) {
     e.stopPropagation();
     toggleEcho(r.name);
   });
-  row.append(b, echo);
+  const personas = document.createElement("button");
+  personas.className = "room-personas";
+  personas.title = "Personajes de la room";
+  const pi = document.createElement("i");
+  pi.className = "ti ti-users";
+  personas.appendChild(pi);
+  personas.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openRoomPersonaModal(r.name);
+  });
+  row.append(b, echo, personas);
   return row;
 }
 
@@ -170,4 +180,110 @@ export async function initRooms() {
       closeForm();
     }
   });
+}
+
+let roomModal = null;
+
+function closeRoomModal() {
+  if (!roomModal) return;
+  document.removeEventListener("keydown", roomModalKey);
+  roomModal.remove();
+  roomModal = null;
+}
+
+function roomModalKey(e) {
+  if (e.key === "Escape") closeRoomModal();
+}
+
+function buildRoomChecks(container, checkedNames) {
+  for (const p of state.personas) {
+    const label = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = p.name;
+    if (checkedNames.includes(p.name)) cb.checked = true;
+    const s = document.createElement("span");
+    s.textContent = p.name;
+    label.append(cb, s);
+    container.appendChild(label);
+  }
+}
+
+function openRoomPersonaModal(name) {
+  if (roomModal) return;
+  const r = state.rooms.find((x) => x.name === name);
+  if (!r) return;
+  if (state.personas.length === 0) {
+    toast("Personas todavía no cargadas", "error");
+    return;
+  }
+  const overlay = document.createElement("div");
+  overlay.className = "persona-modal-overlay";
+  const boxEl = document.createElement("div");
+  boxEl.className = "persona-modal";
+
+  const head = document.createElement("div");
+  head.className = "persona-modal-head";
+  const titleEl = document.createElement("div");
+  titleEl.className = "persona-modal-title";
+  titleEl.textContent = "Personajes de «" + r.name + "»";
+  const x = document.createElement("button");
+  x.className = "persona-modal-x";
+  x.title = "Cerrar";
+  x.setAttribute("aria-label", "Cerrar");
+  const xi = document.createElement("i");
+  xi.className = "ti ti-x";
+  x.appendChild(xi);
+  x.addEventListener("click", closeRoomModal);
+  head.append(titleEl, x);
+
+  const body = document.createElement("div");
+  body.className = "persona-modal-body";
+  const checks = document.createElement("div");
+  checks.className = "persona-checks";
+  buildRoomChecks(checks, r.persona_names || []);
+  body.appendChild(checks);
+
+  const foot = document.createElement("div");
+  foot.className = "persona-modal-foot";
+  const cancel = document.createElement("button");
+  cancel.className = "pm-btn";
+  cancel.textContent = "Cancelar";
+  cancel.addEventListener("click", closeRoomModal);
+  const save = document.createElement("button");
+  save.className = "pm-btn primary";
+  save.textContent = "Guardar";
+  save.addEventListener("click", () => saveRoomPersonas(name, checks));
+  foot.append(cancel, save);
+
+  boxEl.append(head, body, foot);
+  overlay.appendChild(boxEl);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeRoomModal();
+  });
+  document.body.appendChild(overlay);
+  roomModal = overlay;
+  document.addEventListener("keydown", roomModalKey);
+}
+
+async function saveRoomPersonas(name, checks) {
+  const r = state.rooms.find((x) => x.name === name);
+  if (!r) return;
+  const names = [...checks.querySelectorAll("input[type=checkbox]:checked")].map((cb) => cb.value);
+  if (names.length === 0) {
+    toast("La room necesita al menos 1 personaje", "error");
+    return;
+  }
+  try {
+    const updated = await api("/api/rooms/" + encodeURIComponent(name), {
+      method: "PUT",
+      body: { name: r.name, persona_names: names, echo_chamber: r.echo_chamber },
+    });
+    Object.assign(r, updated);
+    closeRoomModal();
+    renderRooms();
+    toast("Personajes actualizados: " + r.name, "success");
+  } catch (err) {
+    toast(err.message || "Error al guardar los personajes", "error");
+  }
 }
