@@ -1,10 +1,10 @@
-// personas.js — sidebar de personas, panel de detalle, who-chips, upload de .wav y editor de persona.
+// personas.js — sidebar de personas, who-chips, upload de .wav en 2 fases (draft → aceptar/rechazar) y editor de persona.
 import { state } from "./state.js";
 import { api, avatarCss, initials, toast } from "./utils.js";
-import { setRightTab } from "./layout.js";
 
 let uploading = false;
-let currentPersona = null;
+let draft = null;
+let draftEls = null;
 
 function renderSidebar() {
   const list = document.getElementById("persona-list");
@@ -39,14 +39,27 @@ function renderSidebar() {
       info.appendChild(lang);
     }
 
-    item.appendChild(av);
-    item.appendChild(info);
+    const editBtn = document.createElement("button");
+    editBtn.className = "persona-edit";
+    editBtn.title = "Editar persona";
+    editBtn.setAttribute("aria-label", `Editar ${p.name}`);
+    const ei = document.createElement("i");
+    ei.className = "ti ti-pencil";
+    editBtn.appendChild(ei);
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openPersonaModal(p.name);
+    });
+    item.appendChild(editBtn);
+
+    item.append(av, info);
     if (p.tts_capable) {
       const vol = document.createElement("i");
       vol.className = "ti ti-volume persona-vol";
       item.appendChild(vol);
     }
-    item.addEventListener("click", () => selectPersona(p.name, { openPanel: true }));
+    item.appendChild(editBtn);
+    item.addEventListener("click", () => openPersonaModal(p.name));
     list.appendChild(item);
   }
 }
@@ -94,8 +107,8 @@ function buildDropZone() {
 function setDropBusy(busy, filename) {
   const panel = document.getElementById("rpanel-personas");
   const drops = [...panel.querySelectorAll(".drop-zone")];
-  if (busy) {
-    for (const drop of drops) {
+  for (const drop of drops) {
+    if (busy) {
       drop.classList.remove("dragover");
       drop.classList.add("busy");
       drop.textContent = "";
@@ -103,19 +116,18 @@ function setDropBusy(busy, filename) {
       icon.className = "ti ti-loader spinning";
       drop.append(icon, document.createTextNode(`\nTranscribiendo «${filename}»… (ASR + LLM)`));
     }
-  } else if (drops.some((d) => d.classList.contains("busy"))) {
-    if (currentPersona) renderDetail(currentPersona);
-    else renderEmptyDetail();
   }
 }
 
 async function uploadWav(file) {
   if (uploading) return;
+  if (draft) return;
   if (!/\.wav$/i.test(file.name)) {
     toast("Solo se aceptan archivos .wav", "error");
     return;
   }
   uploading = true;
+  renderUploadPanel();
   setDropBusy(true, file.name);
   try {
     const fd = new FormData();
@@ -133,181 +145,190 @@ async function uploadWav(file) {
       if (typeof detail !== "string") detail = JSON.stringify(detail);
       throw new Error(detail || `HTTP ${res.status}`);
     }
-    await refreshPersonas();
-    await selectPersona(body.name);
-    toast(`«${body.name}» creada`, "success");
+    draft = body;
     if (body.warning) toast(body.warning, "warning");
   } catch (err) {
     toast(err.message || "Error al subir el .wav", "error");
   } finally {
     uploading = false;
-    setDropBusy(false);
+    renderUploadPanel();
   }
 }
 
-async function retranscribe(p, btn, box, syncSave) {
+function sectionLabel(text) {
+  const l = document.createElement("div");
+  l.className = "pd-slabel";
+  l.textContent = text;
+  return l;
+}
+
+function draftField(label, value, cls) {
+  const f = document.createElement("div");
+  f.className = "draft-field";
+  const l = document.createElement("div");
+  l.className = "pm-label";
+  l.textContent = label;
+  const ta = document.createElement("textarea");
+  ta.className = cls;
+  ta.value = value || "";
+  f.append(l, ta);
+  return f;
+}
+
+function renderUploadPanel() {
+  const panel = document.getElementById("rpanel-personas");
+  panel.textContent = "";
+  draftEls = null;
+  if (!draft) {
+    panel.appendChild(buildDropZone());
+    const hint = document.createElement("div");
+    hint.className = "pd-hint";
+    hint.textContent = "El nombre sale del archivo: <Nombre>.wav, <Nombre>_Eng.wav o <Nombre>_Latino.wav";
+    panel.appendChild(hint);
+    return;
+  }
+
+  const head = document.createElement("div");
+  head.className = "pd-head";
+  const av = document.createElement("div");
+  av.className = "pd-avatar";
+  av.style.cssText = avatarCss({ name: draft.name, avatar_color: draft.avatar_color, avatar_image: null });
+  av.textContent = initials(draft.name);
+  const meta = document.createElement("div");
+  meta.className = "draft-meta";
+  const nameInput = document.createElement("input");
+  nameInput.className = "draft-name";
+  nameInput.type = "text";
+  nameInput.value = draft.name;
+  nameInput.spellcheck = false;
+  meta.appendChild(nameInput);
+  if (draft.language) {
+    const lang = document.createElement("div");
+    lang.className = "persona-lang";
+    lang.textContent = draft.language;
+    meta.appendChild(lang);
+  }
+  head.append(av, meta);
+  panel.appendChild(head);
+
+  if (draft.warning) {
+    const warn = document.createElement("div");
+    warn.className = "draft-warning";
+    warn.textContent = draft.warning;
+    panel.appendChild(warn);
+  }
+
+  const persona = document.createElement("div");
+  persona.className = "pd-section";
+  persona.appendChild(sectionLabel("Personaje"));
+  const descField = draftField("Descripción", draft.description, "pm-textarea");
+  const promptField = draftField("System prompt", draft.system_prompt, "pm-textarea tall");
+  persona.append(descField, promptField);
+  panel.appendChild(persona);
+
+  const transcript = document.createElement("div");
+  transcript.className = "pd-section";
+  transcript.appendChild(sectionLabel("Transcripción"));
+  const box = document.createElement("textarea");
+  box.className = "transcript-box";
+  box.value = draft.transcript ?? "";
+  box.placeholder = "Sin transcripción";
+  const reBtn = document.createElement("button");
+  reBtn.className = "wav-btn";
+  const ri = document.createElement("i");
+  ri.className = "ti ti-refresh";
+  reBtn.append(ri, document.createTextNode(" Re-transcribe"));
+  reBtn.addEventListener("click", () => retranscribeDraft(reBtn, box));
+  const tactions = document.createElement("div");
+  tactions.className = "transcript-actions";
+  tactions.appendChild(reBtn);
+  transcript.append(box, tactions);
+  panel.appendChild(transcript);
+
+  const actions = document.createElement("div");
+  actions.className = "draft-actions";
+  const cancel = document.createElement("button");
+  cancel.className = "pm-btn danger";
+  cancel.textContent = "Cancelar";
+  cancel.addEventListener("click", rejectDraft);
+  const ok = document.createElement("button");
+  ok.className = "pm-btn primary";
+  ok.textContent = "Aceptar persona";
+  ok.addEventListener("click", acceptDraft);
+  actions.append(cancel, ok);
+  panel.appendChild(actions);
+
+  draftEls = {
+    name: nameInput,
+    desc: descField.querySelector("textarea"),
+    prompt: promptField.querySelector("textarea"),
+    box,
+    ok,
+  };
+}
+
+async function retranscribeDraft(btn, box) {
+  if (!draft) return;
   btn.disabled = true;
   btn.textContent = "";
   const icon = document.createElement("i");
   icon.className = "ti ti-loader spinning";
   btn.append(icon, document.createTextNode(" Re-transcribiendo…"));
   try {
-    const body = await api(`/api/personas/${encodeURIComponent(p.name)}/retranscribe`, { method: "POST" });
-    p.transcript = body.transcript;
-    box.value = body.transcript ?? "";
+    const body = await api(`/api/personas/pending/${draft.token}/retranscribe`, { method: "POST" });
+    draft.transcript = body.transcript ?? "";
+    box.value = draft.transcript;
     toast("Transcripción actualizada", "success");
   } catch (err) {
     toast(err.message || "Error al re-transcribir", "error");
   } finally {
     btn.disabled = false;
     btn.textContent = "";
-    const ri = document.createElement("i");
-    ri.className = "ti ti-refresh";
-    btn.append(ri, document.createTextNode(" Re-transcribe"));
-    syncSave();
+    const r = document.createElement("i");
+    r.className = "ti ti-refresh";
+    btn.append(r, document.createTextNode(" Re-transcribe"));
   }
 }
 
-async function saveTranscript(p, box, btn, syncSave) {
-  const value = box.value;
-  if (value === (p.transcript ?? "")) return;
-  btn.disabled = true;
+async function acceptDraft() {
+  if (!draft || !draftEls) return;
+  const name = draftEls.name.value.trim();
+  if (!name) {
+    toast("El nombre no puede estar vacío", "error");
+    return;
+  }
+  draftEls.ok.disabled = true;
   try {
-    await api(`/api/personas/${encodeURIComponent(p.name)}/transcript`, {
-      method: "PUT",
-      body: { transcript: value },
+    const body = await api(`/api/personas/pending/${draft.token}/accept`, {
+      method: "POST",
+      body: {
+        name,
+        description: draftEls.desc.value,
+        system_prompt: draftEls.prompt.value,
+        color: draft.avatar_color,
+        transcript: draftEls.box.value,
+      },
     });
-    p.transcript = value;
-    toast("Transcripción guardada", "success");
+    toast(`«${body.name}» creada`, "success");
+    if (body.warning) toast(body.warning, "warning");
+    draft = null;
+    await refreshPersonas();
+    renderUploadPanel();
   } catch (err) {
-    toast(err.message || "Error al guardar la transcripción", "error");
-    box.value = p.transcript ?? "";
-  } finally {
-    syncSave();
+    toast(err.message || "Error al aceptar la persona", "error");
+    draftEls.ok.disabled = false;
   }
 }
 
-function renderDetail(p) {
-  const panel = document.getElementById("rpanel-personas");
-  panel.textContent = "";
-  currentPersona = p;
-
-  const head = document.createElement("div");
-  head.className = "pd-head";
-  const av = document.createElement("div");
-  av.className = "pd-avatar";
-  av.style.cssText = avatarCss(p);
-  av.textContent = initials(p.name);
-  const meta = document.createElement("div");
-  const name = document.createElement("div");
-  name.className = "pd-name";
-  name.textContent = p.name;
-  const desc = document.createElement("div");
-  desc.className = "pd-subdesc";
-  desc.textContent = p.description || "";
-  meta.append(name, desc);
-  head.append(av, meta);
-  panel.appendChild(head);
-
-  const personality = document.createElement("div");
-  personality.className = "pd-section";
-  const plabel = document.createElement("div");
-  plabel.className = "pd-slabel";
-  plabel.textContent = "Personalidad";
-  const ptext = document.createElement("p");
-  ptext.textContent = p.system_prompt || "";
-  personality.append(plabel, ptext);
-  panel.appendChild(personality);
-
-  const voice = document.createElement("div");
-  voice.className = "pd-section";
-  const vlabel = document.createElement("div");
-  vlabel.className = "pd-slabel";
-  vlabel.textContent = "Voice reference";
-  const row = document.createElement("div");
-  row.className = "wav-row";
-  const ico = document.createElement("i");
-  ico.className = "ti ti-file-music";
-  ico.style.fontSize = "15px";
-  ico.style.color = "var(--text-muted)";
-  row.appendChild(ico);
-  const wavName = document.createElement("span");
-  wavName.className = "wav-name";
-  wavName.textContent = p.reference_audio ? p.reference_audio.split("/").pop() : "sin referencia de voz";
-  row.appendChild(wavName);
-  const reBtn = document.createElement("button");
-  reBtn.className = "wav-btn";
-  const ri = document.createElement("i");
-  ri.className = "ti ti-refresh";
-  reBtn.append(ri, document.createTextNode(" Re-transcribe"));
-  if (p.reference_audio) {
-    reBtn.addEventListener("click", () => retranscribe(p, reBtn, box, syncSave));
-  } else {
-    reBtn.disabled = true;
-    reBtn.title = "Sin referencia de voz";
+async function rejectDraft() {
+  if (!draft) return;
+  try {
+    await api(`/api/personas/pending/${draft.token}`, { method: "DELETE" });
+  } catch {
+    // el draft puede no existir en el server; se cancela de todos modos
   }
-  row.appendChild(reBtn);
-  voice.append(vlabel, row);
-  panel.appendChild(voice);
-
-  const box = document.createElement("textarea");
-  box.className = "transcript-box";
-  box.value = p.transcript ?? "";
-  box.placeholder = "Sin transcripción";
-  const saveBtn = document.createElement("button");
-  saveBtn.className = "wav-btn";
-  const si = document.createElement("i");
-  si.className = "ti ti-check";
-  saveBtn.append(si, document.createTextNode(" Guardar"));
-  const syncSave = () => {
-    saveBtn.disabled = box.value === (p.transcript ?? "");
-  };
-  box.addEventListener("input", syncSave);
-  saveBtn.addEventListener("click", () => saveTranscript(p, box, saveBtn, syncSave));
-  syncSave();
-  const tactions = document.createElement("div");
-  tactions.className = "transcript-actions";
-  tactions.appendChild(saveBtn);
-  const transcript = document.createElement("div");
-  transcript.className = "pd-section";
-  const tlabel = document.createElement("div");
-  tlabel.className = "pd-slabel";
-  tlabel.textContent = "Transcripción";
-  transcript.append(tlabel, box, tactions);
-  panel.appendChild(transcript);
-
-  const actions = document.createElement("div");
-  actions.className = "pd-actions";
-  const editBtn = document.createElement("button");
-  const ei = document.createElement("i");
-  ei.className = "ti ti-edit";
-  editBtn.append(ei, document.createTextNode(" Edit"));
-  editBtn.addEventListener("click", () => openPersonaModal(p));
-  const delBtn = document.createElement("button");
-  delBtn.className = "danger";
-  const di = document.createElement("i");
-  di.className = "ti ti-trash";
-  delBtn.append(di, document.createTextNode(" Delete"));
-  delBtn.addEventListener("click", () => openDeleteModal(p));
-  actions.append(editBtn, delBtn);
-  panel.appendChild(actions);
-
-  panel.appendChild(buildDropZone());
-}
-
-function renderEmptyDetail() {
-  const panel = document.getElementById("rpanel-personas");
-  panel.textContent = "";
-  currentPersona = null;
-  const empty = document.createElement("div");
-  empty.className = "pd-empty";
-  empty.textContent = "Sin personas todavía";
-  panel.appendChild(empty);
-  panel.appendChild(buildDropZone());
-  const hint = document.createElement("div");
-  hint.className = "pd-hint";
-  hint.textContent = "El nombre sale del archivo: <Nombre>.wav, <Nombre>_Eng.wav o <Nombre>_Latino.wav";
-  panel.appendChild(hint);
+  draft = null;
+  renderUploadPanel();
 }
 
 let personaModal = null;
@@ -365,31 +386,15 @@ function buildModalFoot() {
   return { foot, cancel };
 }
 
-async function savePersona(p, description, systemPrompt, color) {
-  const payload = {
-    name: p.name,
-    description,
-    system_prompt: systemPrompt,
-    router_hints: p.router_hints || [],
-    avatar_color: color,
-    avatar_image: p.avatar_image ?? null,
-    reference_audio: p.reference_audio ?? null,
-    reference_audio_transcript: p.reference_audio_transcript ?? null,
-    reference_audio_language: p.reference_audio_language ?? null,
-  };
+async function openPersonaModal(name) {
+  if (personaModal) return;
+  let p;
   try {
-    await api(`/api/personas/${encodeURIComponent(p.name)}`, { method: "PUT", body: payload });
+    p = await api("/api/personas/" + encodeURIComponent(name));
   } catch (err) {
-    toast(err.message || "Error al guardar la persona", "error");
+    toast(err.message || "Error al cargar la persona", "error");
     return;
   }
-  closePersonaModal();
-  toast("Persona actualizada", "success");
-  await selectPersona(p.name);
-}
-
-function openPersonaModal(p) {
-  if (personaModal) return;
   const { overlay, boxEl, body } = buildModalShell(`Editar «${p.name}»`);
 
   const mkField = (label) => {
@@ -407,7 +412,7 @@ function openPersonaModal(p) {
   nameInput.className = "pm-input";
   nameInput.type = "text";
   nameInput.value = p.name;
-  nameInput.disabled = true;
+  nameInput.spellcheck = false;
   nameF.appendChild(nameInput);
 
   const descF = mkField("Descripción");
@@ -438,16 +443,54 @@ function openPersonaModal(p) {
   colorWrap.append(colorInput, hexText);
   colorF.appendChild(colorWrap);
 
-  body.append(nameF, descF, promptF, colorF);
+  const voiceF = mkField("Voz de referencia");
+  const voiceRow = document.createElement("div");
+  voiceRow.className = "wav-row";
+  const ico = document.createElement("i");
+  ico.className = "ti ti-file-music";
+  ico.style.fontSize = "15px";
+  ico.style.color = "var(--text-muted)";
+  voiceRow.appendChild(ico);
+  const wavName = document.createElement("span");
+  wavName.className = "wav-name";
+  wavName.textContent = p.reference_audio ? p.reference_audio.split("/").pop() : "sin referencia de voz";
+  voiceRow.appendChild(wavName);
+  const reBtn = document.createElement("button");
+  reBtn.className = "wav-btn";
+  const rri = document.createElement("i");
+  rri.className = "ti ti-refresh";
+  reBtn.append(rri, document.createTextNode(" Re-transcribe"));
+  if (p.reference_audio) {
+    reBtn.addEventListener("click", () => retranscribeModal(p, reBtn, trInput));
+  } else {
+    reBtn.disabled = true;
+    reBtn.title = "Sin referencia de voz";
+  }
+  voiceRow.appendChild(reBtn);
+  voiceF.appendChild(voiceRow);
+
+  const trF = mkField("Transcripción");
+  const trInput = document.createElement("textarea");
+  trInput.className = "pm-textarea tall";
+  trInput.value = p.transcript ?? "";
+  trInput.placeholder = "Sin transcripción";
+  trF.appendChild(trInput);
+
+  body.append(nameF, descF, promptF, colorF, voiceF, trF);
 
   const { foot } = buildModalFoot();
+  const del = document.createElement("button");
+  del.className = "pm-btn danger";
+  del.textContent = "Borrar";
+  del.style.marginRight = "auto";
+  del.addEventListener("click", () => deletePersona(p, del));
   const save = document.createElement("button");
   save.className = "pm-btn primary";
   save.textContent = "Guardar";
   save.addEventListener("click", () =>
-    savePersona(p, descInput.value, promptInput.value, colorInput.value)
+    savePersonaModal(p, { name: nameInput, desc: descInput, prompt: promptInput, color: colorInput, transcript: trInput }, save)
   );
-  foot.appendChild(save);
+  foot.append(del, foot.firstChild, save);
   boxEl.appendChild(foot);
 
   document.body.appendChild(overlay);
@@ -455,7 +498,72 @@ function openPersonaModal(p) {
   document.addEventListener("keydown", personaModalKey);
 }
 
+async function retranscribeModal(p, btn, trInput) {
+  btn.disabled = true;
+  btn.textContent = "";
+  const icon = document.createElement("i");
+  icon.className = "ti ti-loader spinning";
+  btn.append(icon, document.createTextNode(" Re-transcribiendo…"));
+  try {
+    const body = await api(`/api/personas/${encodeURIComponent(p.name)}/retranscribe`, { method: "POST" });
+    p.transcript = body.transcript ?? "";
+    trInput.value = p.transcript;
+    toast("Transcripción actualizada", "success");
+  } catch (err) {
+    toast(err.message || "Error al re-transcribir", "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "";
+    const r = document.createElement("i");
+    r.className = "ti ti-refresh";
+    btn.append(r, document.createTextNode(" Re-transcribe"));
+  }
+}
+
+async function savePersonaModal(p, els, saveBtn) {
+  const newName = els.name.value.trim();
+  saveBtn.disabled = true;
+  try {
+    let current = p;
+    if (newName !== p.name) {
+      if (state.who === p.name) state.who = newName;
+      await api(`/api/personas/${encodeURIComponent(p.name)}/rename`, {
+        method: "POST",
+        body: { name: newName },
+      });
+      current = { ...p, name: newName };
+    }
+    await api(`/api/personas/${encodeURIComponent(current.name)}`, {
+      method: "PUT",
+      body: {
+        name: current.name,
+        description: els.desc.value,
+        system_prompt: els.prompt.value,
+        router_hints: current.router_hints || [],
+        avatar_color: els.color.value,
+        avatar_image: current.avatar_image ?? null,
+        reference_audio: current.reference_audio ?? null,
+        reference_audio_transcript: current.reference_audio_transcript ?? null,
+        reference_audio_language: current.reference_audio_language ?? null,
+      },
+    });
+    if (els.transcript.value !== (current.transcript ?? "")) {
+      await api(`/api/personas/${encodeURIComponent(current.name)}/transcript`, {
+        method: "PUT",
+        body: { transcript: els.transcript.value },
+      });
+    }
+    closePersonaModal();
+    toast("Persona actualizada", "success");
+    await refreshPersonas();
+  } catch (err) {
+    toast(err.message || "Error al guardar la persona", "error");
+    saveBtn.disabled = false;
+  }
+}
+
 async function deletePersona(p, btn) {
+  if (!window.confirm(`¿Borrar «${p.name}»? Se pierde su voz de referencia.`)) return;
   btn.disabled = true;
   try {
     await api(`/api/personas/${encodeURIComponent(p.name)}`, { method: "DELETE" });
@@ -466,34 +574,20 @@ async function deletePersona(p, btn) {
   }
   closePersonaModal();
   toast(`«${p.name}» borrada`, "success");
+  if (state.who === p.name) state.who = "router";
   await refreshPersonas();
-  if (state.personas.length > 0) {
-    await selectPersona(state.personas[0].name, { openPanel: false });
-  } else {
-    renderEmptyDetail();
-  }
+  renderUploadPanel();
 }
 
-function openDeleteModal(p) {
-  if (personaModal) return;
-  const { overlay, boxEl, body } = buildModalShell(`Borrar «${p.name}»`);
+async function refreshPersonas() {
+  state.personas = (await api("/api/personas")).personas || [];
+  renderSidebar();
+  renderWhoChips();
+}
 
-  const msg = document.createElement("p");
-  msg.className = "pm-text";
-  msg.textContent = `¿Borrar «${p.name}»? Se pierde su voz de referencia.`;
-  body.appendChild(msg);
-
-  const { foot } = buildModalFoot();
-  const del = document.createElement("button");
-  del.className = "pm-btn danger";
-  del.textContent = "Borrar";
-  del.addEventListener("click", () => deletePersona(p, del));
-  foot.appendChild(del);
-  boxEl.appendChild(foot);
-
-  document.body.appendChild(overlay);
-  personaModal = overlay;
-  document.addEventListener("keydown", personaModalKey);
+export async function initPersonas() {
+  await refreshPersonas();
+  renderUploadPanel();
 }
 
 const WHO_GAP = 5;
@@ -690,41 +784,4 @@ function renderWhoChips() {
 
   applyWhoFit();
   initWhoResize();
-}
-
-export async function selectPersona(name, opts = {}) {
-  const p = state.personas.find((x) => x.name === name);
-  if (!p) return;
-  document.querySelectorAll("#persona-list .persona").forEach((el) => {
-    el.classList.toggle("active", el.dataset.name === name);
-  });
-  if (opts.openPanel !== false) setRightTab("personas");
-  let full;
-  try {
-    full = await api("/api/personas/" + encodeURIComponent(name));
-  } catch (err) {
-    toast(err.message || "Error al cargar la persona", "error");
-    return;
-  }
-  const idx = state.personas.findIndex((x) => x.name === name);
-  if (idx >= 0) state.personas[idx] = full;
-  renderDetail(full);
-}
-
-async function refreshPersonas() {
-  state.personas = (await api("/api/personas")).personas || [];
-  renderSidebar();
-  renderWhoChips();
-}
-
-export async function initPersonas() {
-  await refreshPersonas();
-  if (state.personas.length > 0) {
-    await selectPersona(state.personas[0].name, { openPanel: false });
-  } else {
-    renderEmptyDetail();
-  }
-  document.getElementById("btn-personas-admin").addEventListener("click", () => {
-    setRightTab("personas");
-  });
 }
