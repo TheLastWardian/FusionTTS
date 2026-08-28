@@ -59,7 +59,7 @@ class SpeakRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
-    who_answers: str = "router"
+    who_answers: str | list[str] = "router"
     chat_room: str = "default"
     message_id: str | None = None
     image_base64: str | None = None

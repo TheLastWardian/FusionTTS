@@ -543,7 +543,11 @@ async function savePersonaModal(p, els, saveBtn) {
   try {
     let current = p;
     if (newName !== p.name) {
-      if (state.who === p.name) state.who = newName;
+      if (Array.isArray(state.who)) {
+        state.who = state.who.map((n) => (n === p.name ? newName : n));
+      } else if (state.who === p.name) {
+        state.who = newName;
+      }
       await api(`/api/personas/${encodeURIComponent(p.name)}/rename`, {
         method: "POST",
         body: { name: newName },
@@ -591,7 +595,12 @@ async function deletePersona(p, btn) {
   }
   closePersonaModal();
   toast(`«${p.name}» borrada`, "success");
-  if (state.who === p.name) state.who = "router";
+  if (Array.isArray(state.who)) {
+    state.who = state.who.filter((n) => n !== p.name);
+    if (state.who.length === 0) state.who = "router";
+  } else if (state.who === p.name) {
+    state.who = "router";
+  }
   await refreshPersonas();
   renderUploadPanel();
 }
@@ -615,9 +624,38 @@ let whoHidden = [];
 let whoRo = null;
 let whoModal = null;
 
+function whoIsSel(value) {
+  return Array.isArray(state.who) ? state.who.includes(value) : state.who === value;
+}
+
+function syncWhoSel() {
+  for (const c of whoChips) c.classList.toggle("sel", whoIsSel(c.dataset.value));
+}
+
 function selectWho(value) {
   state.who = value;
-  for (const c of whoChips) c.classList.toggle("sel", c.dataset.value === value);
+  syncWhoSel();
+  applyWhoFit();
+}
+
+function ctrlSelectWho(value) {
+  const max = Math.max(1, Number(state.config.max_persona_replies) || 2);
+  if (value === "router" || value === "random") {
+    state.who = value;
+  } else {
+    let list = (Array.isArray(state.who) ? state.who : [state.who]).filter(
+      (v) => v !== "router" && v !== "random"
+    );
+    const i = list.indexOf(value);
+    if (i >= 0) {
+      list.splice(i, 1);
+    } else {
+      list.push(value);
+      while (list.length > max) list.shift();
+    }
+    state.who = list.length > 0 ? list : "router";
+  }
+  syncWhoSel();
   applyWhoFit();
 }
 
@@ -635,16 +673,18 @@ function applyWhoFit() {
   const avail = whoWrap.clientWidth;
   whoChips.forEach((c) => { c.style.display = ""; });
   const widths = whoChips.map((c) => c.offsetWidth);
-  const selIdx = whoChips.findIndex((c) => c.dataset.value === state.who);
+  const selIdxs = whoChips
+    .map((c, i) => (whoIsSel(c.dataset.value) ? i : -1))
+    .filter((i) => i >= 0);
 
-  let res = window.FTTS.fitChips(widths, avail, selIdx, WHO_GAP, 0);
+  let res = window.FTTS.fitChips(widths, avail, selIdxs, WHO_GAP, 0);
   if (res.hidden.length > 0) {
     let plusW = measurePlus(res.hidden.length);
     const n1 = res.hidden.length;
-    res = window.FTTS.fitChips(widths, avail, selIdx, WHO_GAP, plusW);
+    res = window.FTTS.fitChips(widths, avail, selIdxs, WHO_GAP, plusW);
     if (String(res.hidden.length).length > String(n1).length) {
       plusW = measurePlus(res.hidden.length);
-      res = window.FTTS.fitChips(widths, avail, selIdx, WHO_GAP, plusW);
+      res = window.FTTS.fitChips(widths, avail, selIdxs, WHO_GAP, plusW);
     }
   }
 
@@ -781,19 +821,23 @@ function renderWhoChips() {
   whoWrap.textContent = "";
   whoChips = [];
   const vis = visiblePersonas();
+  const names = Array.isArray(state.who) ? state.who : [state.who];
   if (
-    state.who !== "router" &&
-    state.who !== "random" &&
-    !vis.some((p) => p.name === state.who)
+    names.some(
+      (v) => v !== "router" && v !== "random" && !vis.some((p) => p.name === v)
+    )
   ) {
     state.who = "router";
   }
   const mk = (label, value) => {
     const b = document.createElement("button");
-    b.className = "who-chip" + (value === state.who ? " sel" : "");
+    b.className = "who-chip" + (whoIsSel(value) ? " sel" : "");
     b.textContent = label;
     b.dataset.value = value;
-    b.addEventListener("click", () => selectWho(value));
+    b.addEventListener("click", (e) => {
+      if (e.ctrlKey || e.metaKey) ctrlSelectWho(value);
+      else selectWho(value);
+    });
     whoWrap.appendChild(b);
     whoChips.push(b);
   };

@@ -253,8 +253,70 @@ def test_explicit_persona_and_unknown_value(client, mock_llm):
     )
     assert resp.status_code == 200
     events = parse_events(resp.text)
+    assert [e["type"] for e in events].count("start") == 1
     assert events[0]["persona"] == "Keqing"
     assert non_stream_calls(mock_llm) == []
+
+
+def test_explicit_list_two_replies_in_order(client, mock_llm):
+    mock_llm.stream_responses = [["uno", " A"], ["dos", " B"]]
+    resp = client.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": ["Fischl", "Jean"], "chat_room": "test"},
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    types = [e["type"] for e in events]
+    assert types.count("start") == 2
+    assert [e["persona"] for e in events if e["type"] == "start"] == ["Fischl", "Jean"]
+    assert "error" not in types
+    assert non_stream_calls(mock_llm) == []
+    assert events[-1] == {"type": "complete", "cancelled": False}
+
+
+def test_explicit_list_single_only_one_reply(client, mock_llm):
+    resp = client.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": ["Keqing"], "chat_room": "test"},
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    assert [e["type"] for e in events].count("start") == 1
+    assert events[0]["persona"] == "Keqing"
+
+
+def test_explicit_list_name_not_in_room_400(client, mock_llm):
+    resp = client.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": ["Keqing"], "chat_room": "echo"},
+    )
+    assert resp.status_code == 400
+
+
+def test_explicit_list_empty_400(client, mock_llm):
+    resp = client.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": [], "chat_room": "test"},
+    )
+    assert resp.status_code == 400
+
+
+def test_explicit_list_echo_room_only_first(client, mock_llm):
+    assert (
+        client.post(
+            "/api/rooms",
+            json={"name": "echo2", "persona_names": ["Fischl", "Jean"], "echo_chamber": True},
+        ).status_code
+        == 201
+    )
+    resp = client.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": ["Fischl", "Jean"], "chat_room": "echo2"},
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    assert [e["type"] for e in events].count("start") == 1
+    assert events[0]["persona"] == "Fischl"
 
     resp = client.post(
         "/api/chat",

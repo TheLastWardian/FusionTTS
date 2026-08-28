@@ -10,14 +10,19 @@
     const hidden = [];
     if (n === 0) return { visible, hidden, plusFits: true };
 
-    let sel = Number.isInteger(selectedIdx) ? selectedIdx : -1;
-    if (sel < 0 || sel >= n) sel = -1;
-    if (sel >= 0) visible[sel] = true;
-    const reserved = sel >= 0 ? widths[sel] : 0;
+    const selIn = Array.isArray(selectedIdx) ? selectedIdx : [selectedIdx];
+    const sel = new Set(
+      [...new Set(selIn)].filter((i) => Number.isInteger(i) && i >= 0 && i < n)
+    );
+    let reserved = 0;
+    for (const i of sel) {
+      visible[i] = true;
+      reserved += widths[i];
+    }
 
     let used = 0;
     for (let i = 0; i < n; i++) {
-      if (i === sel) continue;
+      if (sel.has(i)) continue;
       if (used + gap + widths[i] <= available - reserved) {
         visible[i] = true;
         used += gap + widths[i];
@@ -31,7 +36,7 @@
     if (hidden.length > 0) {
       let i = n - 1;
       while (reserved + used + gap + plusWidth > available && i >= 0) {
-        if (i !== sel && visible[i]) {
+        if (!sel.has(i) && visible[i]) {
           visible[i] = false;
           used -= gap + widths[i];
         }

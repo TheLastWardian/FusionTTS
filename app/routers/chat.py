@@ -158,11 +158,24 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
         yield _sse({"type": "tts_state", "state": "on"})
 
     try:
-        max_replies = min(config.get("max_persona_replies"), len(eligible))
         room = _find_room(state, req.chat_room)
         echo = bool(room and room.get("echo_chamber"))
-        if echo:
+        fixed: list[str] | None = None
+        if isinstance(req.who_answers, list):
+            # seleccion explicita: responden exactamente esas, en orden de clic
+            fixed = list(req.who_answers)
+            if echo:
+                fixed = fixed[:1]
+            max_replies = len(fixed)
+        elif req.who_answers in eligible:
+            # nombre explicito (str): responde solo esa
+            fixed = [req.who_answers]
             max_replies = 1
+        else:
+            # "router" / "random" / nombre inexistente: comportamiento anterior
+            max_replies = min(config.get("max_persona_replies"), len(eligible))
+            if echo:
+                max_replies = 1
 
         user_message_id = req.message_id or str(uuid.uuid4())
 
@@ -187,20 +200,23 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
 
         room_store.append(new_message("user", "user", req.message, image=image_rel))
 
-        try:
-            first = await pick_persona(
-                req.who_answers,
-                req.message,
-                eligible,
-                state.personas,
-                state.llm,
-                config,
-                room_store.history,
-            )
-        except ValueError as exc:
-            yield _sse({"type": "error", "message": str(exc)})
-            yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
-            return
+        if fixed is not None:
+            first = fixed[0]
+        else:
+            try:
+                first = await pick_persona(
+                    req.who_answers,
+                    req.message,
+                    eligible,
+                    state.personas,
+                    state.llm,
+                    config,
+                    room_store.history,
+                )
+            except ValueError as exc:
+                yield _sse({"type": "error", "message": str(exc)})
+                yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
+                return
 
         replied: list[str] = []
         for index in range(max_replies):
@@ -208,7 +224,9 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 if tts_on:
                     await state.dispatcher.stop()
                 break
-            if index == 0:
+            if fixed is not None:
+                persona_name = fixed[index]
+            elif index == 0:
                 persona_name = first
             else:
                 remaining = [n for n in eligible if n not in replied]
@@ -385,6 +403,18 @@ async def chat(req: ChatRequest, request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     state = request.app.state.app_state
+    if isinstance(req.who_answers, list):
+        names = list(dict.fromkeys(req.who_answers))
+        if not names:
+            raise HTTPException(status_code=400, detail="who_answers list is empty")
+        eligible = resolve_room_personas(state.rooms, state.personas, req.chat_room)
+        bad = [n for n in names if n not in eligible]
+        if bad:
+            raise HTTPException(
+                status_code=400,
+                detail="persona(s) no disponible(s) en la room: " + ", ".join(bad),
+            )
+        req.who_answers = names
     state.cancel_event.clear()
     return StreamingResponse(
         _chat_stream(req, state),

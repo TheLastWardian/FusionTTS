@@ -69,3 +69,35 @@ test("selectedIdx fuera de rango se trata como -1", () => {
   assert.deepEqual(r.visible, [true, false]);
   assert.deepEqual(r.hidden, [1]);
 });
+
+test("multi-seleccion: todos los seleccionados siempre visibles (aunque tarden en la lista)", () => {
+  const r = fitChips([30, 30, 30, 30, 30], 70, [1, 4], 5, 0);
+  assert.equal(r.visible[1], true);
+  assert.equal(r.visible[4], true);
+  assert.deepEqual(r.hidden.filter((i) => i !== 1 && i !== 4).sort(), [0, 2, 3].filter((i) => !r.visible[i]));
+});
+
+test("multi-seleccion: el resto entra en orden; si hay ocultos, el +N degrada 1", () => {
+  const r = fitChips([30, 30, 30, 30], 100, [2], 5, 0);
+  assert.equal(r.visible[2], true);
+  assert.equal(r.visible[0], true);
+  assert.equal(r.visible[1], false);
+  assert.equal(r.visible[3], false);
+  assert.deepEqual(r.hidden, [1, 3]);
+});
+
+test("multi-seleccion: +N degrada solo chips no seleccionados", () => {
+  const r = fitChips([30, 30, 30, 30], 100, [0, 3], 5, 30);
+  assert.equal(r.visible[0], true);
+  assert.equal(r.visible[3], true);
+  assert.equal(r.visible[1], false);
+  assert.equal(r.visible[2], false);
+  assert.deepEqual(r.hidden, [1, 2]);
+  assert.equal(r.plusFits, true);
+});
+
+test("multi-seleccion: array vacio equivale a sin seleccionado", () => {
+  const r = fitChips([30, 30], 70, [], 5, 0);
+  assert.deepEqual(r.visible, [true, true]);
+  assert.deepEqual(r.hidden, []);
+});
