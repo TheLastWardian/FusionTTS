@@ -97,6 +97,7 @@ def test_02_enable_async(client):
         time.sleep(0.05)
     assert data["engine"]["state"] == "running"
     assert fake.start_calls == 1
+    assert c.get("/api/config").json()["tts_enabled"] is True
 
 
 def test_03_disable(client):
@@ -108,6 +109,7 @@ def test_03_disable(client):
     data = c.get("/api/tts/status").json()
     assert data["engine"]["state"] == "stopped"
     assert data["dispatcher"]["stopped"] is True
+    assert c.get("/api/config").json()["tts_enabled"] is False
 
 
 def test_04_stop(client):
@@ -164,6 +166,7 @@ def test_09_enable_already_running(client):
     assert r.status_code == 200
     assert r.json() == {"status": "already"}
     assert fake.start_calls == 0
+    assert c.get("/api/config").json()["tts_enabled"] is True
 
 
 def test_10_speak_with_persona(client, tmp_path):

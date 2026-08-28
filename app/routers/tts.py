@@ -39,6 +39,7 @@ async def status(request: Request) -> dict:
 @router.post("/enable")
 async def enable(request: Request) -> JSONResponse:
     state = _state(request)
+    state.config.set("tts_enabled", True)
     if (await state.tts_engine.status())["state"] == "running":
         return JSONResponse({"status": "already"})
     _spawn(state.tts_engine.start())
@@ -50,6 +51,7 @@ async def disable(request: Request) -> dict:
     state = _state(request)
     await state.tts_engine.stop()
     await state.dispatcher.stop()
+    state.config.set("tts_enabled", False)
     return {"status": "disabled"}
 
 
