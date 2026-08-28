@@ -54,7 +54,17 @@ function roomRow(r) {
     e.stopPropagation();
     openRoomPersonaModal(r.name);
   });
-  row.append(b, echo, personas);
+  const del = document.createElement("button");
+  del.className = "room-del";
+  del.title = "Eliminar room";
+  const di = document.createElement("i");
+  di.className = "ti ti-trash";
+  del.appendChild(di);
+  del.addEventListener("click", (e) => {
+    e.stopPropagation();
+    deleteRoom(r.name);
+  });
+  row.append(b, echo, personas, del);
   return row;
 }
 
@@ -180,6 +190,23 @@ export async function initRooms() {
       closeForm();
     }
   });
+}
+
+async function deleteRoom(name) {
+  if (!confirm("¿Eliminar la room '" + name + "'?\nSe borrará la room y todo su historial.")) return;
+  try {
+    await api("/api/rooms/" + encodeURIComponent(name), { method: "DELETE" });
+    state.rooms = state.rooms.filter((x) => x.name !== name);
+    if (state.room === name) {
+      state.room = MAIN_ROOM;
+      await loadHistory(MAIN_ROOM);
+    }
+    renderRooms();
+    updateLabel();
+    toast("Room eliminada: " + name, "success");
+  } catch (err) {
+    toast(err.message || "Error al eliminar la room", "error");
+  }
 }
 
 let roomModal = null;
