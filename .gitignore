@@ -11,6 +11,7 @@ __pycache__/
 chatrooms/
 settings.json
 tts_e2e_results/
+logs/
 
 # Temporales
 *.tmp

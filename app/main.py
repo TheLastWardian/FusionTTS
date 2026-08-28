@@ -13,6 +13,7 @@ from app.routers import rooms as rooms_router
 from app.routers import sessions as sessions_router
 from app.routers import tts as tts_router
 from app.rooms import RoomConfigStore
+from app.logging_setup import setup_logging
 from app.schemas import HealthResponse
 from app.services.asr.manager import ASRManager
 from app.services.llm import LLMClient
@@ -23,6 +24,7 @@ from app.state import AppState
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
     config = ConfigStore()
     state = AppState(config)
     state.llm = LLMClient(config)
