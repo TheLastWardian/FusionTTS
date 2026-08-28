@@ -449,6 +449,8 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
   cursor: pointer; font-size: 11px;
 }
 .msg-act:hover { color: var(--text-primary); background: var(--bg3); }
+.msg-act-delete { color: var(--danger); }
+.msg-act-delete:hover { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
 .msg-sounds { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .msg-sound-btn {
   width: 20px; height: 20px; border-radius: 4px;
