@@ -1,8 +1,8 @@
 // chat.js — flujo de chat: envío POST /api/chat, streaming SSE, burbujas usuario/persona, cancel.
 import { state } from "./state.js";
 import { initials, toast, avatarCss } from "./utils.js";
-import { feedAudioChunk, onTTSEvent, playChunkB64, replayTTS, setActiveTTSMessage, ttsReady } from "./tts.js";
-import { deleteMessage, attachSavedAudio, playSavedSequence } from "./persistence.js";
+import { feedAudioChunk, onTTSEvent, playChunkB64, setActiveTTSMessage, ttsReady } from "./tts.js";
+import { deleteMessage, attachSavedAudio, playSavedSequence, applyAudioMode } from "./persistence.js";
 
 let initialized = false;
 let ta = null;
@@ -115,11 +115,14 @@ function startPersonaBubble(name) {
 // llego por SSE, sin volver a sintetizar
 function addSentenceSound(b, ev) {
   if (!ev.audio) return;
+  if (!ttsReady()) return;
   b.sounds.push(ev);
   if (!b.soundsEl) {
     b.soundsEl = document.createElement("div");
     b.soundsEl.className = "msg-sounds";
-    b.bodyEl.appendChild(b.soundsEl);
+    const actions = b.bodyEl.querySelector(".msg-actions");
+    if (actions) actions.prepend(b.soundsEl);
+    else b.bodyEl.appendChild(b.soundsEl);
   }
   const btn = document.createElement("button");
   btn.className = "msg-sound-btn";
@@ -155,6 +158,27 @@ function finalizeBubble(b, fullText) {
   b.cursor.remove();
   const actions = document.createElement("div");
   actions.className = "msg-actions";
+  if (b.soundsEl) actions.appendChild(b.soundsEl);
+  const replay = document.createElement("button");
+  replay.className = "msg-act msg-act-replay";
+  replay.title = "Reproducir audio guardado";
+  replay.disabled = true;
+  const ri = document.createElement("i");
+  ri.className = "ti ti-volume";
+  replay.appendChild(ri);
+  let replayBusy = false;
+  replay.addEventListener("click", () => {
+    if (replayBusy || !b.savedAudio || !b.savedAudio.length) return;
+    replayBusy = true;
+    replay.disabled = true;
+    ri.className = "ti ti-loader spinning";
+    // el play del primer archivo corre de forma sincrona en el click
+    playSavedSequence(state.room, b.savedAudio, () => {
+      replayBusy = false;
+      ri.className = "ti ti-volume";
+      applyAudioMode(b.rootEl);
+    });
+  });
   const copy = document.createElement("button");
   copy.className = "msg-act msg-act-copy";
   copy.title = "Copiar";
@@ -169,40 +193,6 @@ function finalizeBubble(b, fullText) {
       toast("No se pudo copiar", "error");
     }
   });
-  const replay = document.createElement("button");
-  replay.className = "msg-act msg-act-replay";
-  replay.title = ttsReady() ? "Reproducir (TTS)" : "TTS desactivado";
-  replay.disabled = !ttsReady();
-  const ri = document.createElement("i");
-  ri.className = "ti ti-volume";
-  replay.appendChild(ri);
-  let replayBusy = false;
-  const hasSaved = () => !!(b.savedAudio && b.savedAudio.length);
-  const finishReplay = () => {
-    replayBusy = false;
-    ri.className = "ti ti-volume";
-    replay.disabled = !ttsReady() && !hasSaved();
-    replay.title = ttsReady()
-      ? "Reproducir (TTS)"
-      : hasSaved()
-        ? "Reproducir (archivo guardado)"
-        : "TTS desactivado";
-  };
-  replay.addEventListener("click", async () => {
-    if (replay.disabled || replayBusy) return;
-    replayBusy = true;
-    replay.disabled = true;
-    ri.className = "ti ti-loader spinning";
-    if (ttsReady()) {
-      await replayTTS(b.textEl.textContent, b.persona);
-      finishReplay();
-    } else if (hasSaved()) {
-      // el play del primer archivo corre de forma sincrona en el click
-      playSavedSequence(state.room, b.savedAudio, finishReplay);
-    } else {
-      finishReplay();
-    }
-  });
   const del = document.createElement("button");
   del.className = "msg-act msg-act-delete";
   del.title = "Eliminar del contexto";
@@ -214,8 +204,9 @@ function finalizeBubble(b, fullText) {
       messageBubbles.delete(b.messageId);
     }
   });
-  actions.append(copy, replay, del);
+  actions.append(replay, copy, del);
   b.bodyEl.appendChild(actions);
+  applyAudioMode(b.rootEl);
 }
 
 function finishStream() {
@@ -352,17 +343,8 @@ export function initChat() {
     if (state.streaming) cancelChat();
     else send();
   });
-  window.addEventListener("tts:status", (e) => {
-    const ready = !!(e.detail && e.detail.ready);
-    messagesEl.querySelectorAll(".msg-act-replay").forEach((btn) => {
-      const hasSaved = btn.dataset.hasSaved === "1";
-      btn.disabled = !ready && !hasSaved;
-      btn.title = ready
-        ? "Reproducir (TTS)"
-        : hasSaved
-          ? "Reproducir (archivo guardado)"
-          : "TTS desactivado";
-    });
+  window.addEventListener("tts:status", () => {
+    messagesEl.querySelectorAll(".msg").forEach((m) => applyAudioMode(m));
   });
   updateSendButton();
 }
