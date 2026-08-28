@@ -1,8 +1,10 @@
 // persistence.js — historial: carga al cambiar/crear room y al arrancar, mensajes pasados y playback de wavs guardados.
 import { state } from "./state.js";
 import { api, toast, avatarCss, initials } from "./utils.js";
+import { ttsReady } from "./tts.js";
 
 let playing = null;
+let seqToken = null;
 
 export function stopHistoryAudio() {
   if (!playing) return;
@@ -11,6 +13,44 @@ export function stopHistoryAudio() {
   playing.iconEl.className = "ti ti-music";
   playing.btn.title = playing.filename;
   playing = null;
+}
+
+// Reproduce en secuencia los wavs guardados de un mensaje (fallback del
+// boton replay cuando el TTS esta apagado).
+export function stopSavedSequence() {
+  if (seqToken) {
+    seqToken.stopped = true;
+    seqToken = null;
+  }
+}
+
+export async function playSavedSequence(room, filenames) {
+  stopSavedSequence();
+  const token = { stopped: false };
+  seqToken = token;
+  for (const f of filenames) {
+    if (token.stopped) return;
+    let res;
+    try {
+      res = await fetch("/api/rooms/" + encodeURIComponent(room) + "/file/" + encodeURIComponent(f));
+    } catch (err) {
+      toast("No se pudo cargar el audio: " + (err && err.message ? err.message : String(err)), "error");
+      return;
+    }
+    if (!res.ok) {
+      toast("No se pudo cargar el audio (HTTP " + res.status + ")", "error");
+      return;
+    }
+    const url = URL.createObjectURL(await res.blob());
+    const audio = new Audio(url);
+    await new Promise((resolve) => {
+      audio.onended = resolve;
+      audio.onerror = resolve;
+      audio.play().catch(() => resolve());
+    });
+    URL.revokeObjectURL(url);
+  }
+  if (seqToken === token) seqToken = null;
 }
 
 async function playHistoryAudio(btn, room, filename) {
@@ -103,6 +143,49 @@ function makeDeleteButton(messageId, room, el) {
   return del;
 }
 
+// A las burbujas live finalizadas les anade los botones de audio guardado en
+// disco (mismos que la vista de historial), para poder reproducir sin TTS.
+// Se llama en "complete": ahi el dispatcher ya se drenó y audio[] es completo.
+export async function attachSavedAudio(targets, room) {
+  let data;
+  try {
+    data = await api("/api/session/history?room=" + encodeURIComponent(room));
+  } catch {
+    return;
+  }
+  const byUuid = new Map((data.messages || []).map((m) => [m.uuid, m]));
+  for (const t of targets) {
+    const m = byUuid.get(t.id);
+    const files = (m && m.audio) || [];
+    if (!files.length) continue;
+    t.b.savedAudio = files;
+    let actions = t.b.bodyEl.querySelector(".msg-actions");
+    if (!actions) {
+      actions = document.createElement("div");
+      actions.className = "msg-actions";
+      t.b.bodyEl.appendChild(actions);
+    }
+    for (const f of files) {
+      const play = document.createElement("button");
+      play.className = "msg-act msg-act-audio";
+      play.title = f;
+      const pi = document.createElement("i");
+      pi.className = "ti ti-music";
+      play.appendChild(pi);
+      play.addEventListener("click", () => playHistoryAudio(play, room, f));
+      const del = actions.querySelector(".msg-act-delete");
+      if (del) actions.insertBefore(play, del);
+      else actions.appendChild(play);
+    }
+    const replay = actions.querySelector(".msg-act-replay");
+    if (replay) {
+      replay.dataset.hasSaved = "1";
+      replay.disabled = false;
+      if (!ttsReady()) replay.title = "Reproducir (archivo guardado)";
+    }
+  }
+}
+
 function renderHistoryMessage(el, m, room) {
   const isUser = m.role === "user";
   const persona = isUser ? null : state.personas.find((p) => p.name === m.sender);
@@ -170,6 +253,7 @@ function renderHistoryMessage(el, m, room) {
 
 export async function loadHistory(room) {
   stopHistoryAudio();
+  stopSavedSequence();
   let data;
   try {
     data = await api("/api/session/history?room=" + encodeURIComponent(room));

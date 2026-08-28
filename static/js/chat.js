@@ -2,7 +2,7 @@
 import { state } from "./state.js";
 import { initials, toast, avatarCss } from "./utils.js";
 import { feedAudioChunk, onTTSEvent, playChunkB64, replayTTS, setActiveTTSMessage, ttsReady } from "./tts.js";
-import { deleteMessage } from "./persistence.js";
+import { deleteMessage, attachSavedAudio, playSavedSequence } from "./persistence.js";
 
 let initialized = false;
 let ta = null;
@@ -177,16 +177,25 @@ function finalizeBubble(b, fullText) {
   ri.className = "ti ti-volume";
   replay.appendChild(ri);
   let replayBusy = false;
+  const hasSaved = () => !!(b.savedAudio && b.savedAudio.length);
   replay.addEventListener("click", async () => {
     if (replay.disabled || replayBusy) return;
     replayBusy = true;
     replay.disabled = true;
     ri.className = "ti ti-loader spinning";
-    await replayTTS(b.textEl.textContent, b.persona);
+    if (ttsReady()) {
+      await replayTTS(b.textEl.textContent, b.persona);
+    } else if (hasSaved()) {
+      await playSavedSequence(state.room, b.savedAudio);
+    }
     replayBusy = false;
     ri.className = "ti ti-volume";
-    replay.disabled = !ttsReady();
-    replay.title = ttsReady() ? "Reproducir (TTS)" : "TTS desactivado";
+    replay.disabled = !ttsReady() && !hasSaved();
+    replay.title = ttsReady()
+      ? "Reproducir (TTS)"
+      : hasSaved()
+        ? "Reproducir (archivo guardado)"
+        : "TTS desactivado";
   });
   const del = document.createElement("button");
   del.className = "msg-act msg-act-delete";
@@ -233,6 +242,12 @@ function onEvent(ev) {
     toast(ev.message || "Error en el chat", "error");
   } else if (ev.type === "complete") {
     if (ev.cancelled) toast("Chat cancelado", "info");
+    // anade a las burbujas los audios ya guardados en disco (fallback sin TTS)
+    const targets = [];
+    for (const [id, b] of messageBubbles) {
+      if (b.final) targets.push({ id, b });
+    }
+    if (targets.length) attachSavedAudio(targets, state.room);
     finishStream();
   }
 }
@@ -334,8 +349,13 @@ export function initChat() {
   window.addEventListener("tts:status", (e) => {
     const ready = !!(e.detail && e.detail.ready);
     messagesEl.querySelectorAll(".msg-act-replay").forEach((btn) => {
-      btn.disabled = !ready;
-      btn.title = ready ? "Reproducir (TTS)" : "TTS desactivado";
+      const hasSaved = btn.dataset.hasSaved === "1";
+      btn.disabled = !ready && !hasSaved;
+      btn.title = ready
+        ? "Reproducir (TTS)"
+        : hasSaved
+          ? "Reproducir (archivo guardado)"
+          : "TTS desactivado";
     });
   });
   updateSendButton();
