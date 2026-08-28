@@ -2,6 +2,7 @@
 import { state } from "./state.js";
 import { api, toast } from "./utils.js";
 import { cancelChat } from "./chat.js";
+import { loadHistory } from "./persistence.js";
 
 function renderRooms() {
   const list = document.getElementById("room-list");
@@ -45,6 +46,7 @@ async function switchRoom(name) {
   renderRooms();
   updateLabel();
   toast("Room: " + name, "info");
+  await loadHistory(name);
 }
 
 async function toggleEcho(name) {
@@ -109,6 +111,7 @@ export async function initRooms() {
       renderRooms();
       updateLabel();
       toast("Room creado: " + created.name, "success");
+      await loadHistory(created.name);
     } catch (err) {
       toast(err.message || "Error al crear el room", "error");
     }

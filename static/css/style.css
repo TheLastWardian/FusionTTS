@@ -359,6 +359,11 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
 .msg-act:hover { color: var(--text-primary); background: var(--bg3); }
 @keyframes ftts-spin { to { transform: rotate(360deg); } }
 .spinning { display: inline-block; animation: ftts-spin 0.9s linear infinite; }
+.msg-image {
+  max-width: 220px; max-height: 180px;
+  border-radius: var(--radius); margin-top: 6px;
+  display: block;
+}
 
 .typing-dots { display: flex; gap: 3px; align-items: center; padding: 6px 2px 2px; }
 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted); animation: sd .8s ease-in-out infinite; }

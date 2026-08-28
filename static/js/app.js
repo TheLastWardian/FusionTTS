@@ -7,6 +7,8 @@ import { initPersonas } from "./personas.js";
 import { initRooms } from "./rooms.js";
 import { initChat } from "./chat.js";
 import { initTTS } from "./tts.js";
+import { state } from "./state.js";
+import { loadHistory } from "./persistence.js";
 
 initTheme();
 initLayout();
@@ -29,3 +31,4 @@ try {
 } catch {
   document.getElementById("api-banner").classList.add("show");
 }
+if (state.room) loadHistory(state.room);
