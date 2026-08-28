@@ -325,6 +325,8 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
   font-size: 14px; flex-shrink: 0;
 }
 .room-form-btn:hover { background: var(--bg3); }
+.room-form-cancel { color: var(--danger); }
+.room-form-cancel:hover { background: var(--danger-bg); }
 .persona-checks {
   display: flex; flex-direction: column; gap: 2px;
   max-height: 120px; overflow-y: auto;

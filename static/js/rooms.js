@@ -120,6 +120,7 @@ export async function initRooms() {
   const input = document.getElementById("room-name");
   const newBtn = document.getElementById("btn-new-room");
   const okBtn = document.getElementById("room-form-ok");
+  const cancelBtn = document.getElementById("room-form-cancel");
   const checksEl = document.getElementById("room-form-personas");
 
   const buildChecks = () => {
@@ -182,6 +183,7 @@ export async function initRooms() {
     input.focus();
   });
   okBtn.addEventListener("click", submit);
+  cancelBtn.addEventListener("click", closeForm);
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
