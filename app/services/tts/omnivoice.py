@@ -172,9 +172,9 @@ class OmniVoiceEngine:
             await asyncio.sleep(READY_POLL_INTERVAL)
 
     async def stop(self) -> None:
+        # Siempre pide /unload: el server decide (ready → descarga, loading →
+        # descarga pendiente al terminar la carga, unloaded → no-op).
         if not self._proc_alive():
-            return
-        if (await self._server_status()) != "ready":
             return
         try:
             resp = await self._client.post(self._base_url() + "/unload")

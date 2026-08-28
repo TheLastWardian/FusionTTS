@@ -9,8 +9,13 @@
       this.gap = opts.gap !== undefined ? opts.gap : 80;
       this.onPlay = opts.onPlay || (() => {});
       this.onDrain = opts.onDrain || (() => {});
-      this._setTimeout = opts.setTimeout || setTimeout;
-      this._clearTimeout = opts.clearTimeout || clearTimeout;
+      // El setTimeout de window exige this === window (brand check Web IDL);
+      // llamarlo como metodo de la cola ("Illegal invocation" en Chrome) no.
+      const setTO = opts.setTimeout || setTimeout;
+      const clearTO = opts.clearTimeout || clearTimeout;
+      const host = typeof self !== "undefined" ? self : globalThis;
+      this._setTimeout = (fn, ms) => setTO.call(host, fn, ms);
+      this._clearTimeout = (id) => clearTO.call(host, id);
       this.state = "idle";
       this.pending = [];
       this.current = null;

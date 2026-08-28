@@ -69,6 +69,7 @@ DEFAULT_DURATION = None
 
 _status = "unloaded"  # "unloaded" | "loading" | "ready" | "unloading"
 _model = None
+_pending_unload = False  # /unload durante "loading": descargue al terminar
 
 _state_lock = threading.Lock()
 _state_cond = threading.Condition(_state_lock)
@@ -286,8 +287,10 @@ def status():
 
 @app.post("/load")
 def load():
-    """Carga el modelo. Idempotente y single-flight (lock + condition)."""
-    global _status
+    """Carga el modelo. Idempotente y single-flight (lock + condition).
+    Si un /unload llego durante la carga, descargue al terminar (no queda
+    un modelo cargado que nadie pidio)."""
+    global _status, _pending_unload
     with _state_cond:
         # Si otro load esta en vuelo, esperar su resultado.
         _state_cond.wait_for(lambda: _status in ("ready", "unloaded"))
@@ -299,25 +302,41 @@ def load():
         _warmup_model_impl()
     except Exception as e:
         with _state_cond:
+            _pending_unload = False
             if _status == "loading":
                 _status = "unloaded"
                 _state_cond.notify_all()
         raise HTTPException(status_code=500, detail=str(e))
     with _state_cond:
-        _status = "ready"
-        _state_cond.notify_all()
+        if _pending_unload:
+            _pending_unload = False
+            _status = "unloading"
+            _state_cond.notify_all()
+        else:
+            _status = "ready"
+            _state_cond.notify_all()
+    if _status == "unloading":
+        logger.info("Carga anulada por /unload pendiente: descargando.")
+        _unload_model_impl()
+        with _state_cond:
+            _status = "unloaded"
+            _state_cond.notify_all()
     return {"status": _status}
 
 
 @app.post("/unload")
 def unload():
-    """Libera el modelo. Idempotente."""
-    global _status
+    """Libera el modelo. Idempotente y no bloqueante: si hay carga en curso,
+    marca descarga pendiente (la aplica /load al terminar) y responde al tiro."""
+    global _status, _pending_unload
     with _state_cond:
-        _state_cond.wait_for(lambda: _status in ("ready", "unloaded"))
-        if _status != "ready":
+        if _status == "ready":
+            _status = "unloading"
+        elif _status == "loading":
+            _pending_unload = True
+            return {"status": _status, "pending_unload": True}
+        else:
             return {"status": _status}
-        _status = "unloading"
     try:
         _unload_model_impl()
     finally:

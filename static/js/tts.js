@@ -158,10 +158,13 @@ function applyStatus() {
     clearWatchdog();
   }
 
+  // running + "unloaded" = proceso calido con el modelo descargado = OFF
+  // (VRAM libre); "loading" es la unica fase que muestra "cargando…".
+  const srv = engine.state === "running" && engine.server ? engine.server.status : null;
   let st;
-  if (engine.state !== "running") st = "off";
-  else if (engine.server && engine.server.status === "ready") st = "active";
-  else st = "loading";
+  if (srv === "ready") st = "active";
+  else if (srv === "loading") st = "loading";
+  else st = "off";
   setChip(st);
 
   const pauseBtn = document.getElementById("btn-tts-pause");
@@ -212,6 +215,8 @@ async function enableTTS() {
 }
 
 async function disableTTS() {
+  pendingEnable = false;
+  clearWatchdog();
   try {
     await api("/api/tts/disable", { method: "POST" });
     stopLocal();
@@ -225,9 +230,17 @@ async function onChip() {
   ensureCtx();
   const engine = state.tts && state.tts.engine;
   if (!engine) return;
-  if (engine.state === "running") {
-    if (!pendingEnable) disableTTS();
+  const srv = engine.state === "running" ? engine.server && engine.server.status : null;
+  if (srv === "ready") {
+    disableTTS();
     return;
+  }
+  if (srv === "loading") {
+    disableTTS(); // la prensa cancela la carga en curso
+    return;
+  }
+  if (engine.state === "running" && srv === "unloaded" && pendingEnable) {
+    return; // enable recién disparado (spawn en curso): no hacer nada
   }
   enableTTS();
 }

@@ -185,6 +185,40 @@ test("cadena de 3: onPlay en orden 1→2→3, cada uno separado exactamente por 
   );
 });
 
+test("brand check: _armGap invoca setTimeout con this=global (sin Illegal invocation)", () => {
+  // Simula el brand check de Chrome: el setTimeout de window exige this === window.
+  const timers = [];
+  let now = 0;
+  const strictSet = function (fn, ms) {
+    if (this !== globalThis) throw new TypeError("Illegal invocation");
+    timers.push({ at: now + ms, fn, cancelled: false });
+    return timers.length;
+  };
+  const strictClear = function (id) {
+    if (this !== globalThis) throw new TypeError("Illegal invocation");
+    timers[id - 1].cancelled = true;
+  };
+  const played = [];
+  const q = new AudioQueue({
+    gap: 80,
+    onPlay: (item) => played.push(item),
+    setTimeout: strictSet,
+    clearTimeout: strictClear,
+  });
+  q.enqueue("a");
+  q.enqueue("b");
+  q.currentEnded(); // antes del fix tiraba Illegal invocation aqui
+  assert.equal(played.length, 1);
+  assert.equal(q.pendingCount, 1);
+  for (const t of timers) {
+    if (!t.cancelled && t.at <= 80) {
+      t.cancelled = true;
+      t.fn();
+    }
+  }
+  assert.deepEqual(played, ["a", "b"]);
+});
+
 test("gap custom (25 ms): el advance mide 25 ms", () => {
   const { q, clock, played } = makeQueue(25);
   q.enqueue("a");

@@ -39,11 +39,19 @@ async def status(request: Request) -> dict:
     }
 
 
-async def _start_and_arm(state) -> None:
+def _bump_gen(state) -> int:
+    state._tts_gen = getattr(state, "_tts_gen", 0) + 1
+    return state._tts_gen
+
+
+async def _start_and_arm(state, gen: int) -> None:
     try:
         await state.tts_engine.start()
     except Exception as exc:
         logger.warning("tts engine no pudo arrancar: %s", exc)
+        return
+    if getattr(state, "_tts_gen", 0) != gen:
+        logger.info("tts: se desactivo durante la carga; no habilito el config")
         return
     state.config.set("tts_enabled", True)
 
@@ -51,19 +59,29 @@ async def _start_and_arm(state) -> None:
 @router.post("/enable")
 async def enable(request: Request) -> JSONResponse:
     state = _state(request)
+    task = getattr(state, "_tts_start_task", None)
+    if task is not None and not task.done():
+        return JSONResponse({"status": "enabling"}, status_code=202)
     status = await state.tts_engine.status()
     server = status.get("server") or {}
     if status["state"] == "running" and server.get("status") == "ready":
         state.config.set("tts_enabled", True)
         return JSONResponse({"status": "already"})
-    _spawn(_start_and_arm(state))
+    task = asyncio.create_task(_start_and_arm(state, getattr(state, "_tts_gen", 0)))
+    state._tts_start_task = task
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     return JSONResponse({"status": "enabling"}, status_code=202)
 
 
 @router.post("/disable")
 async def disable(request: Request) -> dict:
     state = _state(request)
-    await state.tts_engine.stop()
+    _bump_gen(state)  # anula cualquier start en vuelo (no arma tras la carga)
+    try:
+        await state.tts_engine.stop()
+    except TTSError as exc:
+        logger.warning("tts disable: %s", exc)
     await state.dispatcher.stop()
     state.config.set("tts_enabled", False)
     return {"status": "disabled"}

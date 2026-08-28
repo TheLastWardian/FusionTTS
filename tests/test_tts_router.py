@@ -219,3 +219,28 @@ def test_11_enable_start_failure_stays_disabled(client):
     assert fake.start_calls == 1
     assert c.get("/api/config").json()["tts_enabled"] is False
     assert c.get("/api/tts/status").json()["engine"]["state"] != "running"
+
+
+def test_12_disable_during_load_cancels_arming(client):
+    c, fake = client
+    assert c.post("/api/tts/enable").status_code == 202
+    # el usuario apaga mientras la carga sigue en vuelo
+    assert c.post("/api/tts/disable").status_code == 200
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        data = c.get("/api/tts/status").json()
+        if data["engine"]["state"] == "running":
+            break
+        time.sleep(0.05)
+    time.sleep(0.2)  # da tiempo al task de armar (no lo debe hacer)
+    assert c.get("/api/config").json()["tts_enabled"] is False
+
+
+def test_13_enable_dedupes_inflight(client):
+    c, fake = client
+    assert c.post("/api/tts/enable").status_code == 202
+    assert c.post("/api/tts/enable").status_code == 202
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline and fake.start_calls < 1:
+        time.sleep(0.05)
+    assert fake.start_calls == 1
