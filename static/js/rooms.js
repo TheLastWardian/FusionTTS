@@ -43,6 +43,7 @@ async function switchRoom(name) {
   if (name === state.room) return;
   if (state.streaming) await cancelChat();
   state.room = name;
+  saveActiveRoom();
   renderRooms();
   updateLabel();
   toast("Room: " + name, "info");
@@ -73,12 +74,29 @@ function updateLabel() {
   document.getElementById("room-label").textContent = state.room;
 }
 
+function saveActiveRoom() {
+  try {
+    localStorage.setItem("ftts.room", state.room);
+  } catch {
+  }
+}
+
+function restoreActiveRoom() {
+  try {
+    const saved = localStorage.getItem("ftts.room");
+    if (saved && state.rooms.some((r) => r.name === saved)) state.room = saved;
+  } catch {
+  }
+}
+
 export async function initRooms() {
   const data = await api("/api/rooms");
   state.rooms = data.rooms || [];
+  restoreActiveRoom();
   if (state.rooms.length > 0 && !state.rooms.some((r) => r.name === state.room)) {
     state.room = state.rooms[0].name;
   }
+  saveActiveRoom();
   renderRooms();
   updateLabel();
 
@@ -107,6 +125,7 @@ export async function initRooms() {
       });
       state.rooms.push(created);
       state.room = created.name;
+      saveActiveRoom();
       closeForm();
       renderRooms();
       updateLabel();
