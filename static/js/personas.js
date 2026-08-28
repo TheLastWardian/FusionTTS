@@ -6,17 +6,34 @@ let uploading = false;
 let draft = null;
 let draftEls = null;
 
+function visiblePersonas() {
+  if (state.room === "default") return state.personas;
+  const r = state.rooms.find((x) => x.name === state.room);
+  if (!r) return state.personas;
+  const names = new Set(r.persona_names || []);
+  return state.personas.filter((p) => names.has(p.name));
+}
+
+export function refreshRoomViews() {
+  renderSidebar();
+  renderWhoChips();
+}
+
 function renderSidebar() {
   const list = document.getElementById("persona-list");
   list.textContent = "";
-  if (state.personas.length === 0) {
+  const vis = visiblePersonas();
+  if (vis.length === 0) {
     const empty = document.createElement("div");
     empty.className = "list-empty";
-    empty.textContent = "Sin personas — subí un .wav";
+    empty.textContent =
+      state.personas.length === 0
+        ? "Sin personas — subí un .wav"
+        : "Sin personas en esta room — asígalas desde el ícono de personas de la room";
     list.appendChild(empty);
     return;
   }
-  for (const p of state.personas) {
+  for (const p of vis) {
     const item = document.createElement("div");
     item.className = "persona";
     item.dataset.name = p.name;
@@ -763,6 +780,14 @@ function renderWhoChips() {
   whoWrap = document.getElementById("who-chips");
   whoWrap.textContent = "";
   whoChips = [];
+  const vis = visiblePersonas();
+  if (
+    state.who !== "router" &&
+    state.who !== "random" &&
+    !vis.some((p) => p.name === state.who)
+  ) {
+    state.who = "router";
+  }
   const mk = (label, value) => {
     const b = document.createElement("button");
     b.className = "who-chip" + (value === state.who ? " sel" : "");
@@ -773,7 +798,7 @@ function renderWhoChips() {
     whoChips.push(b);
   };
   mk("LLM router", "router");
-  for (const p of state.personas) mk(p.name, p.name);
+  for (const p of vis) mk(p.name, p.name);
   mk("Random", "random");
 
   whoPlus = document.createElement("button");

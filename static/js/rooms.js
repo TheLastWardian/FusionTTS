@@ -3,6 +3,7 @@ import { state } from "./state.js";
 import { api, toast } from "./utils.js";
 import { cancelChat } from "./chat.js";
 import { loadHistory } from "./persistence.js";
+import { refreshRoomViews } from "./personas.js";
 
 const MAIN_ROOM = "default";
 const MAIN_LABEL = "main";
@@ -80,6 +81,7 @@ async function switchRoom(name) {
   if (state.streaming) await cancelChat();
   state.room = name;
   renderRooms();
+  refreshRoomViews();
   updateLabel();
   toast("Room: " + (name === MAIN_ROOM ? MAIN_LABEL : name), "info");
   await loadHistory(name);
@@ -163,6 +165,7 @@ export async function initRooms() {
       state.room = created.name;
       closeForm();
       renderRooms();
+      refreshRoomViews();
       updateLabel();
       toast("Room creado: " + created.name, "success");
       await loadHistory(created.name);
@@ -201,7 +204,11 @@ async function deleteRoom(name) {
     state.rooms = state.rooms.filter((x) => x.name !== name);
     if (state.room === name) {
       state.room = MAIN_ROOM;
+      renderRooms();
+      refreshRoomViews();
+      updateLabel();
       await loadHistory(MAIN_ROOM);
+      return toast("Room eliminada: " + name, "success");
     }
     renderRooms();
     updateLabel();
@@ -311,6 +318,7 @@ async function saveRoomPersonas(name, checks) {
     Object.assign(r, updated);
     closeRoomModal();
     renderRooms();
+    if (state.room === r.name) refreshRoomViews();
     toast("Personajes actualizados: " + r.name, "success");
   } catch (err) {
     toast(err.message || "Error al guardar los personajes", "error");
