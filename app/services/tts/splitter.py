@@ -167,3 +167,5 @@ def chunk_text_punctuation(
 
 CHUNK_LEN = 120
 MIN_CHUNK_LEN = None
+# ~400 chars ≈ 30 s de habla: tamaño de chunk para tts_mode "full".
+FULL_CHUNK_LEN = 400

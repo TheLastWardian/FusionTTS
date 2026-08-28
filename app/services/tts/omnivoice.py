@@ -27,6 +27,8 @@ CLIENT_TIMEOUT = httpx.Timeout(10.0, connect=10.0)
 STATUS_TIMEOUT = httpx.Timeout(2.0, connect=2.0)
 EMPTY_AUDIO_MAX_BYTES = 1000
 SYNTH_MAX_ATTEMPTS = 3
+SERVER_LOG_MAX_BYTES = 5 * 1024 * 1024
+SERVER_LOG_BACKUPS = 9  # server.log + 9 = 10 archivos (los mas nuevos)
 
 
 def _json_detail(resp: httpx.Response) -> str:
@@ -76,6 +78,29 @@ class OmniVoiceEngine:
     def _proc_alive(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
 
+    @staticmethod
+    def _server_log_path() -> Path:
+        log_path = paths.BASE_DIR / "logs" / "tts-server" / "server.log"
+        return log_path
+
+    @staticmethod
+    def _rotate_server_log(log_path: Path) -> None:
+        """Rotacion manual (el server es otro proceso): conserva los ultimos 10."""
+        try:
+            if not log_path.exists() or log_path.stat().st_size < SERVER_LOG_MAX_BYTES:
+                return
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            oldest = log_path.with_name(f"{log_path.name}.{SERVER_LOG_BACKUPS + 1}")
+            if oldest.exists():
+                oldest.unlink()
+            for i in range(SERVER_LOG_BACKUPS, 0, -1):
+                src = log_path.with_name(f"{log_path.name}.{i}")
+                if src.exists():
+                    src.rename(log_path.with_name(f"{log_path.name}.{i + 1}"))
+            log_path.rename(log_path.with_name(f"{log_path.name}.1"))
+        except OSError as exc:
+            logger.warning("rotacion de server.log fallida: %s", exc)
+
     async def spawn(self) -> None:
         async with self._lock:
             if self._closed:
@@ -91,7 +116,10 @@ class OmniVoiceEngine:
             if self._proc_log is not None:
                 self._proc_log.close()
                 self._proc_log = None
-            self._proc_log = open(self._server_dir / "server.log", "a", encoding="utf-8")
+            log_path = self._server_log_path()
+            self._rotate_server_log(log_path)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            self._proc_log = open(log_path, "a", encoding="utf-8")
             try:
                 self._proc = subprocess.Popen(
                     [python, "server.py"],
@@ -172,16 +200,25 @@ class OmniVoiceEngine:
             await asyncio.sleep(READY_POLL_INTERVAL)
 
     async def stop(self) -> None:
-        # Siempre pide /unload: el server decide (ready → descarga, loading →
-        # descarga pendiente al terminar la carga, unloaded → no-op).
+        """Mata el proceso del server: VRAM a 0 (el contexto CUDA muere con el).
+        Un warm process conservaria ~1 GB de VRAM; el proximo start() re-spawnea."""
         if not self._proc_alive():
             return
-        try:
-            resp = await self._client.post(self._base_url() + "/unload")
-        except httpx.HTTPError as exc:
-            raise TTSClientError(f"unload fallido: {exc}", 0) from exc
-        if resp.status_code >= 400:
-            raise TTSClientError(_json_detail(resp), resp.status_code)
+        proc = self._proc
+        self._proc = None
+        proc.terminate()
+        for _ in range(50):
+            if proc.poll() is not None:
+                break
+            await asyncio.sleep(0.1)
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        log = self._proc_log
+        self._proc_log = None
+        if log is not None:
+            log.close()
+        logger.info("tts server detenido (pid=%d); VRAM liberada", proc.pid)
 
     async def close(self) -> None:
         async with self._lock:

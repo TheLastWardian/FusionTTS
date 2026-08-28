@@ -207,7 +207,7 @@ async function enableTTS() {
         }
         setChip("off");
       }
-    }, 60000);
+    }, 120000); // cold start completo (import + load + warmup); empareja READY_TIMEOUT=120 del engine
   } catch (err) {
     toast(err.message || "Error al encender el TTS", "error");
     setChip("error");

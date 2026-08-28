@@ -15,7 +15,12 @@ from app.services import vision
 from app.services.chat_context import build_llm_messages
 from app.services.llm import LLMError
 from app.services.persona_router import pick_persona, resolve_room_personas
-from app.services.tts.splitter import CHUNK_LEN, MIN_CHUNK_LEN, chunk_text_punctuation
+from app.services.tts.splitter import (
+    CHUNK_LEN,
+    FULL_CHUNK_LEN,
+    MIN_CHUNK_LEN,
+    chunk_text_punctuation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +78,7 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
         return
 
     tts_on = bool(config.get("tts_enabled"))
+    tts_mode = config.get("tts_mode")
     if tts_on:
         state.dispatcher.reset()
         yield _sse({"type": "tts_state", "state": "on"})
@@ -159,7 +165,7 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
         if echo:
             full_text = req.message
             yield _sse({"type": "token", "persona": persona_name, "token": full_text})
-            if tts_on:
+            if tts_on and tts_mode != "full":
                 ready, buf = _drain_sentences(full_text)
                 for sentence in ready:
                     await state.dispatcher.enqueue(sentence, assistant_message_id, persona_name)
@@ -179,11 +185,12 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
             try:
                 async for token in state.llm.stream_chat(messages, state.cancel_event):
                     full_text += token
-                    buf += token
                     yield _sse(
                         {"type": "token", "persona": persona_name, "token": token}
                     )
-                    if tts_on:
+                    # "full": se encola el texto completo al terminar (abajo)
+                    if tts_on and tts_mode != "full":
+                        buf += token
                         ready, buf = _drain_sentences(buf)
                         for sentence in ready:
                             await state.dispatcher.enqueue(
@@ -218,8 +225,16 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 "message_id": assistant_message_id,
             }
         )
-        if tts_on and buf.strip():
-            await state.dispatcher.enqueue(buf.strip(), assistant_message_id, persona_name)
+        if tts_on:
+            if tts_mode == "full":
+                for chunk in chunk_text_punctuation(full_text, FULL_CHUNK_LEN):
+                    await state.dispatcher.enqueue(
+                        chunk, assistant_message_id, persona_name
+                    )
+            elif buf.strip():
+                await state.dispatcher.enqueue(
+                    buf.strip(), assistant_message_id, persona_name
+                )
 
     if tts_on:
         await state.dispatcher.wait_until_done()

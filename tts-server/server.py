@@ -78,6 +78,11 @@ _PROMPT_CACHE_MAX = 16
 _prompt_cache: "OrderedDict[str, object]" = OrderedDict()
 _prompt_cache_lock = threading.Lock()
 
+# generate() (difusion) no es thread-safe: serializa /synthesize concurrentes
+# (worker del chat vs replay /api/tts/speak). _prompt_cache_lock se adquiere
+# siempre DENTRO de _infer_lock, nunca al revés -> sin deadlock.
+_infer_lock = threading.Lock()
+
 
 def _release_memory():
     """gc + cache de CUDA (solo si hay torch y CUDA disponibles)."""
@@ -221,22 +226,23 @@ def _synthesize_sync(req: SynthesizeRequest) -> SynthesizeResponse:
     if model is None:
         raise HTTPException(status_code=503, detail="Modelo no cargado")
 
-    prompt = None
-    if req.audio_base64:
-        prompt = _get_or_create_prompt(req.audio_base64, req.prompt_text)
+    with _infer_lock:
+        prompt = None
+        if req.audio_base64:
+            prompt = _get_or_create_prompt(req.audio_base64, req.prompt_text)
 
-    # Pass-through a generate() (3 modos: voice clone / instruct / auto).
-    # seed: NO se pasa (OmniVoice no lo soporta).
-    audio = model.generate(
-        req.text,
-        language=req.language or None,
-        instruct=req.instruct or None,
-        duration=req.duration,
-        speed=req.speed,
-        voice_clone_prompt=prompt,
-        num_step=req.num_steps,
-        guidance_scale=req.guidance_scale,
-    )
+        # Pass-through a generate() (3 modos: voice clone / instruct / auto).
+        # seed: NO se pasa (OmniVoice no lo soporta).
+        audio = model.generate(
+            req.text,
+            language=req.language or None,
+            instruct=req.instruct or None,
+            duration=req.duration,
+            speed=req.speed,
+            voice_clone_prompt=prompt,
+            num_step=req.num_steps,
+            guidance_scale=req.guidance_scale,
+        )
 
     # audio es lista de np.ndarray, tomar el primero (o el array directo)
     audio_np = audio[0] if isinstance(audio, list) else audio

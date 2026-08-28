@@ -222,16 +222,24 @@ async def test_05_synthesize_body_and_result(make_engine):
 async def test_06_stop_then_synthesize_auto_load(make_engine):
     engine, config = make_engine()
     await engine.start()
+    pid = engine._proc.pid
     await engine.stop()
+    # stop() mata el proceso: VRAM a 0
+    assert engine._proc is None
     st = await engine.status()
-    assert st["state"] == "running"
-    assert st["server"]["status"] == "unloaded"
+    assert st["state"] == "stopped"
+    assert st["server"] is None
+    # el siguiente synthesize re-spawnea un proceso NUEVO que carga el modelo
     result = await engine.synthesize("hola")
     assert result.sample_rate == 24000
+    assert engine._proc is not None
+    assert engine._proc.pid != pid
     st = await engine.status()
+    assert st["state"] == "running"
     assert st["server"]["status"] == "ready"
+    # proceso nuevo: el contador de cargas arranca desde 0
     counters = await _get(config.get("tts_server_port"), "/counters")
-    assert counters["load_calls"] == 2
+    assert counters["load_calls"] == 1
 
 
 async def test_07_respawn_after_crash(make_engine):

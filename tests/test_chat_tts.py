@@ -221,3 +221,42 @@ def test_chat_cancel_stops_dispatcher(client):
     assert "done" in types
     assert events[-1] == {"type": "complete", "cancelled": True}
     assert state.dispatcher.is_stopped() is True
+
+
+def test_chat_tts_full_mode_chunks(client):
+    c, mock_llm, fake = client
+    assert (
+        c.post("/api/config", json={"key": "max_persona_replies", "value": 1}).status_code
+        == 200
+    )
+    assert c.post("/api/config", json={"key": "tts_enabled", "value": True}).status_code == 200
+    assert c.post("/api/config", json={"key": "tts_mode", "value": "full"}).status_code == 200
+    text = (
+        "Hola, qué gusto saber de ti por fin después de tanto tiempo sin noticias. "
+        "Espero que todo esté bien por tu lado, con la familia y los proyectos de siempre. "
+        "Acá por mi parte hemos pasado un par de semanas movidas entre el trabajo y el viaje. "
+        "La buena noticia es que todo salió mejor de lo que esperábamos al principio. "
+        "Me encantaría que pudiéramos quedarnos a tomar un café la próxima semana. "
+        "Avísame cuándo te conviene y organizamos algo cerca de donde vives, sin prisa."
+    )
+    words = text.split(" ")
+    mock_llm.stream_responses = [[words[0]] + [f" {w}" for w in words[1:]]]
+    resp = c.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": "random", "chat_room": "test"},
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    types = [e["type"] for e in events]
+    assert "error" not in types
+    assert "done" in types
+    assert "audio_chunk" in types
+
+    # modo "full": el texto completo (~469 chars) encola 2 bloques de <= 400
+    # en orden (con CHUNK_LEN=120 serían 6 oraciones sueltas)
+    chunks = [t for t, _, _, _ in fake.synth_calls]
+    assert len(chunks) == 2
+    for chunk in chunks:
+        assert len(chunk) <= 400
+    assert len(chunks[0]) > 120
+    assert "".join(chunks).replace(" ", "") == text.replace(" ", "")
