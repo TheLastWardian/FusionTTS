@@ -9,17 +9,30 @@ Chat multi-persona con TTS OmniVoice bajo demanda. "Recreación" de TalkWithMe c
 - [x] T0: git + esqueleto
 - [ ] T1–T20: ver `IMPLEMENTATION_PLAN.md`
 
-## Requisitos (resumen — detalle en el README final, task-19)
+## Requisitos
 
-- Python 3.11+, git
-- GPU NVIDIA con CUDA para TTS (OmniVoice) y ASR (whisper)
-- Pesos en caché HuggingFace: `k2-fsa/OmniVoice`, `Systran/faster-whisper-medium` (o internet para bajarlos)
-- LLM OpenAI-compatible corriendo (llama.cpp por defecto, puerto 8080)
-- Venv de OmniVoice existente (el server TTS usa su interprete; no se modifica ese proyecto)
+### Por PC
 
-## Uso
+- Windows 10/11
+- Python 3.11.x en PATH (los venvs son 3.11.9)
+- GPU NVIDIA con CUDA para TTS/ASR (CPU funciona, lento)
+- Disco: app venv ≈ 2-3 GB + OmniVoice ≈ 5.2 GB + modelos ≈ 2 GB
+- LLM OpenAI-compatible en `:8080` (ejemplo: `llama-server -m <model.gguf> -c 4096 --port 8080`)
 
-```
-setup.bat    # primera vez: crea venv + instala (pide confirmación antes de instalar)
-start.bat    # arranca todo y abre el navegador en http://localhost:8000
-```
+### Qué se copia (portabilidad)
+
+- `FusionTTS/` (repo completo: app, personas, rooms, settings)
+- `OmniVoice/` como carpeta sibling (venv + paquete `omnivoice`)
+- Caché HuggingFace (`%USERPROFILE%\.cache\huggingface`: `k2-fsa/OmniVoice` + `Systran/faster-whisper-medium`) o re-descarga con internet
+
+### Qué necesita internet
+
+- Solo `setup.bat` (pip) y el primer uso del modelo ASR (si no se pre-descargó)
+- En runtime: nada (offline-first; el TTS server corre con `HF_HUB_OFFLINE=1`)
+
+### Uso
+
+1. `setup.bat` (primera vez; muestra un manifiesto y pide confirmación antes de tocar nada)
+2. Iniciar el LLM en `:8080`
+3. `start.bat`
+4. Navegador en `http://localhost:8000`
