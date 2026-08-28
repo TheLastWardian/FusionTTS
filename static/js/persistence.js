@@ -138,7 +138,7 @@ function renderHistoryMessage(el, m, room) {
   const actions = document.createElement("div");
   actions.className = "msg-actions";
   const copy = document.createElement("button");
-  copy.className = "msg-act";
+  copy.className = "msg-act msg-act-copy";
   copy.title = "Copiar";
   const ci = document.createElement("i");
   ci.className = "ti ti-copy";

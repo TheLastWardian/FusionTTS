@@ -449,16 +449,22 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
   cursor: pointer; font-size: 11px;
 }
 .msg-act:hover { color: var(--text-primary); background: var(--bg3); }
+.msg-act:disabled { opacity: .4; cursor: default; }
+.msg-act-copy { color: var(--accent); }
+.msg-act-copy:hover { color: var(--accent); background: var(--accent-bg); border-color: var(--accent-border); }
+.msg-act-audio, .msg-act-replay { color: var(--success); }
+.msg-act-audio:hover, .msg-act-replay:hover, .msg-sound-btn:hover {
+  color: var(--success); background: var(--success-bg); border-color: var(--success-border);
+}
 .msg-act-delete { color: var(--danger); }
 .msg-act-delete:hover { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
 .msg-sounds { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .msg-sound-btn {
   width: 20px; height: 20px; border-radius: 4px;
   border: 1px solid var(--border); background: var(--bg1);
-  color: var(--text-muted); display: flex; align-items: center; justify-content: center;
+  color: var(--success); display: flex; align-items: center; justify-content: center;
   cursor: pointer; font-size: 10px;
 }
-.msg-sound-btn:hover { color: var(--text-primary); background: var(--bg3); }
 @keyframes ftts-spin { to { transform: rotate(360deg); } }
 .spinning { display: inline-block; animation: ftts-spin 0.9s linear infinite; }
 .msg-image {
