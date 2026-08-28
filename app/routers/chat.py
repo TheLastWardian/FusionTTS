@@ -320,9 +320,28 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                     yield ev
 
         if tts_on:
-            # contabilidad: wait_until_done solo regresa cuando cada oración
-            # produjo audio (ya en la caja) o fue contada como perdida
-            await state.dispatcher.wait_until_done()
+            # Entrega en vivo: el wait de completion corre en paralelo como
+            # task; se entregan los chunks a medida que el pump los produce
+            # (local_q drenada antes de cada wait). La contabilidad es la
+            # misma: complete solo cuando cada oración produjo audio o fue
+            # contada como perdida.
+            done_wait = asyncio.ensure_future(state.dispatcher.wait_until_done())
+            while True:
+                for ev in _drain_local():
+                    yield ev
+                if done_wait.done():
+                    break
+                get_f = asyncio.ensure_future(local_q.get())
+                await asyncio.wait(
+                    {get_f, done_wait}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if not get_f.done():
+                    get_f.cancel()
+                else:
+                    # local_q estaba vacía (acaba de drenarse): re-encolar
+                    # conserva el orden
+                    local_q.put_nowait(get_f.result())
+            done_wait.result()
             pump_stop.set()
             await pump_drained.wait()
             pump_task.cancel()
