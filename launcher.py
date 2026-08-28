@@ -118,7 +118,10 @@ def main():
     def shutdown(signum, frame):
         print("\nApagando...")
         try:
-            ctypes.windll.kernel32.GenerateConsoleCtrlEvent(0, proc.pid)
+            # CTRL_BREAK (1), no CTRL_C (0): uvicorn (CREATE_NEW_PROCESS_GROUP)
+            # ignora el CTRL_C empircamente pero cierra al instante con BREAK
+            # (sale el teardown de lifespan: mata TTS/ASR y libera VRAM).
+            ctypes.windll.kernel32.GenerateConsoleCtrlEvent(1, proc.pid)
         except Exception:
             try:
                 proc.terminate()
