@@ -49,6 +49,60 @@ async function playHistoryAudio(btn, room, filename) {
   btn.title = "Detener";
 }
 
+function showEmptyState(el) {
+  const es = document.createElement("div");
+  es.className = "empty-state";
+  const i = document.createElement("i");
+  i.className = "ti ti-messages";
+  const span = document.createElement("span");
+  span.textContent = "Sin mensajes todavía";
+  es.append(i, span);
+  el.appendChild(es);
+}
+
+// Elimina el mensaje del contexto de la conversacion del room (backend borra
+// de history; los archivos de audio/imagen se quedan en disco).
+export async function deleteMessage(messageId, room, el) {
+  if (playing && el.contains(playing.btn)) stopHistoryAudio();
+  let res;
+  try {
+    res = await fetch(
+      "/api/rooms/" + encodeURIComponent(room) + "/messages/" + encodeURIComponent(messageId),
+      { method: "DELETE" },
+    );
+  } catch (err) {
+    toast("No se pudo eliminar: " + (err && err.message ? err.message : String(err)), "error");
+    return false;
+  }
+  if (!res.ok) {
+    let detail = "HTTP " + res.status;
+    try {
+      const body = await res.json();
+      if (body && body.detail !== undefined) {
+        detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      }
+    } catch {}
+    toast(detail, "error");
+    return false;
+  }
+  el.remove();
+  const elMessages = document.getElementById("messages");
+  if (!elMessages.querySelector(".msg")) showEmptyState(elMessages);
+  toast("Mensaje eliminado", "success");
+  return true;
+}
+
+function makeDeleteButton(messageId, room, el) {
+  const del = document.createElement("button");
+  del.className = "msg-act msg-act-delete";
+  del.title = "Eliminar del contexto";
+  const di = document.createElement("i");
+  di.className = "ti ti-trash";
+  del.appendChild(di);
+  del.addEventListener("click", () => deleteMessage(messageId, room, el));
+  return del;
+}
+
 function renderHistoryMessage(el, m, room) {
   const isUser = m.role === "user";
   const persona = isUser ? null : state.personas.find((p) => p.name === m.sender);
@@ -108,6 +162,7 @@ function renderHistoryMessage(el, m, room) {
     play.addEventListener("click", () => playHistoryAudio(play, room, f));
     actions.appendChild(play);
   }
+  actions.appendChild(makeDeleteButton(m.uuid, room, msg));
   body.append(meta, bubble, actions);
   msg.append(av, body);
   el.appendChild(msg);
@@ -127,15 +182,6 @@ export async function loadHistory(room) {
   for (const m of data.messages || []) {
     renderHistoryMessage(el, m, room);
   }
-  if (!data.messages || data.messages.length === 0) {
-    const es = document.createElement("div");
-    es.className = "empty-state";
-    const i = document.createElement("i");
-    i.className = "ti ti-messages";
-    const span = document.createElement("span");
-    span.textContent = "Sin mensajes todavía";
-    es.append(i, span);
-    el.appendChild(es);
-  }
+  if (!data.messages || data.messages.length === 0) showEmptyState(el);
   el.scrollTop = el.scrollHeight;
 }

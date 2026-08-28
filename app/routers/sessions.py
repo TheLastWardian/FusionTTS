@@ -25,6 +25,16 @@ async def session_history(request: Request, room: str | None = None) -> dict:
     return {"room": store.room_name, "messages": list(store.history)}
 
 
+@router.delete("/rooms/{room}/messages/{message_uuid}", status_code=204)
+async def delete_message(request: Request, room: str, message_uuid: str) -> None:
+    try:
+        store = request.app.state.app_state.get_room_store(room)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not store.delete_message(message_uuid):
+        raise HTTPException(status_code=404, detail=f"message not found: {message_uuid}")
+
+
 @router.get("/rooms/{room}/file/{filename:path}")
 async def room_file(request: Request, room: str, filename: str) -> FileResponse:
     try:

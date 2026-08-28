@@ -58,3 +58,30 @@ def test_history_invalid_room_400(client, room):
 def test_history_missing_room_param_400(client):
     r = client.get("/api/session/history")
     assert r.status_code == 400
+
+
+def test_delete_message_204_removes_from_context(client):
+    store = client.app.state.app_state.get_room_store("test-room")
+    m1 = new_message("user", "user", "hola")
+    m2 = new_message("assistant", "Jean", "chao")
+    store.append(m1)
+    store.append(m2)
+
+    r = client.delete(f"/api/rooms/test-room/messages/{m1['uuid']}")
+    assert r.status_code == 204
+    assert [m["uuid"] for m in store.history] == [m2["uuid"]]
+    data = client.get("/api/session/history", params={"room": "test-room"}).json()
+    assert [m["uuid"] for m in data["messages"]] == [m2["uuid"]]
+
+
+def test_delete_message_404_unknown(client):
+    store = client.app.state.app_state.get_room_store("test-room")
+    store.append(new_message("user", "user", "hola"))
+    r = client.delete("/api/rooms/test-room/messages/nope")
+    assert r.status_code == 404
+    assert len(store.history) == 1
+
+
+def test_delete_message_invalid_room_400(client):
+    r = client.delete("/api/rooms/bad!name/messages/x")
+    assert r.status_code == 400

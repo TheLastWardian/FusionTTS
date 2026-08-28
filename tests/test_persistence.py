@@ -133,7 +133,45 @@ def test_add_audio_in_memory_only_when_save_history_off(store, config):
     store.append(m)
     assert store.add_audio("u1", "Jean/u1_0.wav") is True
     assert m["audio"] == ["Jean/u1_0.wav"]
+
+
+def test_delete_message_removes_and_persists(store):
+    m1, m2, m3 = msg(uuid="u1"), msg(uuid="u2"), msg(uuid="u3")
+    for m in (m1, m2, m3):
+        store.append(m)
+    assert store.delete_message("u2") is True
+    assert store.history == [m1, m3]
+    data = json.loads(store.history_path.read_text(encoding="utf-8"))
+    assert [m["uuid"] for m in data] == ["u1", "u3"]
+
+
+def test_delete_message_unknown_returns_false(store):
+    m = msg(uuid="u1")
+    store.append(m)
+    before = store.history_path.read_text(encoding="utf-8")
+    assert store.delete_message("nope") is False
+    assert store.history == [m]
+    assert store.history_path.read_text(encoding="utf-8") == before
+
+
+def test_delete_message_save_history_off(store, config):
+    config.set("save_history", False)
+    store.append(msg(uuid="u1"))
+    assert store.delete_message("u1") is True
+    assert store.history == []
     assert not store.history_path.exists()
+
+
+def test_delete_message_keeps_files_on_disk(store):
+    m = msg(uuid="u1")
+    store.append(m)
+    rel = store.save_wav("Jean", "u1", 0, b"RIFF")
+    assert store.add_audio("u1", rel) is True
+    assert store.delete_message("u1") is True
+    # el mensaje desaparece del contexto; el wav se queda en disco
+    assert store.history == []
+    assert (store.dir / rel).is_file()
+    assert json.loads(store.history_path.read_text(encoding="utf-8")) == []
 
 
 def test_save_image_creates_file(store):

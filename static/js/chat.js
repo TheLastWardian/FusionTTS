@@ -2,6 +2,7 @@
 import { state } from "./state.js";
 import { initials, toast, avatarCss } from "./utils.js";
 import { feedAudioChunk, onTTSEvent, playChunkB64, replayTTS, setActiveTTSMessage, ttsReady } from "./tts.js";
+import { deleteMessage } from "./persistence.js";
 
 let initialized = false;
 let ta = null;
@@ -30,7 +31,7 @@ function resizeTextarea() {
   ta.style.height = Math.min(ta.scrollHeight, 90) + "px";
 }
 
-function addUserBubble(text) {
+function addUserBubble(text, messageId) {
   removeEmptyState();
   const msg = document.createElement("div");
   msg.className = "msg user";
@@ -49,7 +50,17 @@ function addUserBubble(text) {
   const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
   bubble.textContent = text;
-  body.append(meta, bubble);
+  const actions = document.createElement("div");
+  actions.className = "msg-actions";
+  const del = document.createElement("button");
+  del.className = "msg-act msg-act-delete";
+  del.title = "Eliminar del contexto";
+  const di = document.createElement("i");
+  di.className = "ti ti-trash";
+  del.appendChild(di);
+  del.addEventListener("click", () => deleteMessage(messageId, state.room, msg));
+  actions.appendChild(del);
+  body.append(meta, bubble, actions);
   msg.append(av, body);
   messagesEl.appendChild(msg);
   scrollBottom();
@@ -177,7 +188,18 @@ function finalizeBubble(b, fullText) {
     replay.disabled = !ttsReady();
     replay.title = ttsReady() ? "Reproducir (TTS)" : "TTS desactivado";
   });
-  actions.append(copy, replay);
+  const del = document.createElement("button");
+  del.className = "msg-act msg-act-delete";
+  del.title = "Eliminar del contexto";
+  const di = document.createElement("i");
+  di.className = "ti ti-trash";
+  del.appendChild(di);
+  del.addEventListener("click", () => {
+    if (b.messageId && deleteMessage(b.messageId, state.room, b.rootEl)) {
+      messageBubbles.delete(b.messageId);
+    }
+  });
+  actions.append(copy, replay, del);
   b.bodyEl.appendChild(actions);
 }
 
@@ -218,7 +240,8 @@ function onEvent(ev) {
 async function send() {
   const text = ta.value.trim();
   if (!text || state.streaming) return;
-  addUserBubble(text);
+  const messageId = crypto.randomUUID();
+  addUserBubble(text, messageId);
   ta.value = "";
   resizeTextarea();
   state.streaming = true;
@@ -231,7 +254,7 @@ async function send() {
         message: text,
         who_answers: state.who,
         chat_room: state.room,
-        message_id: crypto.randomUUID(),
+        message_id: messageId,
       }),
     });
     if (!res.ok) {

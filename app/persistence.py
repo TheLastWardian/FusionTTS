@@ -120,6 +120,19 @@ class RoomStore:
             self._pending_audio.setdefault(msg_uuid, []).append(rel_path)
             return False
 
+    def delete_message(self, msg_uuid: str) -> bool:
+        # Borra el mensaje del contexto de la conversacion (in-memory +
+        # history.json). Los archivos asociados (wavs/imagenes) se quedan en
+        # disco a proposito.
+        with self._lock:
+            for i, m in enumerate(self.history):
+                if m.get("uuid") == msg_uuid:
+                    self.history.pop(i)
+                    if self.config.get("save_history"):
+                        self._write_history()
+                    return True
+            return False
+
     def save_image(self, image_bytes: bytes, ext: str = ".png") -> str | None:
         if not self.config.get("save_history"):
             return None
