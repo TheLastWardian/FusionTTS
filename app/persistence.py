@@ -27,9 +27,9 @@ def validate_room_name(name) -> str:
     return name
 
 
-def new_message(role: str, sender: str, text: str, audio=None, image=None) -> dict:
+def new_message(role: str, sender: str, text: str, audio=None, image=None, message_uuid=None) -> dict:
     return {
-        "uuid": str(uuid.uuid4()),
+        "uuid": message_uuid or str(uuid.uuid4()),
         "role": role,
         "sender": sender,
         "text": text,
@@ -47,6 +47,7 @@ class RoomStore:
         self.dir = self.root / self.room_name
         self.history: list[dict] = []
         self._lock = threading.Lock()
+        self._pending_audio: dict[str, list[str]] = {}
 
     @property
     def history_path(self) -> Path:
@@ -84,17 +85,40 @@ class RoomStore:
     def append(self, message: dict) -> dict:
         with self._lock:
             self.history.append(message)
+            pending = self._pending_audio.pop(message.get("uuid"), [])
+            if pending:
+                message["audio"].extend(pending)
             if self.config.get("save_history"):
                 self._write_history()
         return message
 
-    def save_wav(self, msg_uuid: str, index: int, wav_bytes: bytes) -> str | None:
+    def save_wav(self, persona: str, msg_uuid: str, index: int, wav_bytes: bytes) -> str | None:
         if not self.config.get("save_audio"):
             return None
-        filename = f"{msg_uuid}_{index}.wav"
+        rel = f"{self._persona_dirname(persona)}/{msg_uuid}_{index}.wav"
         with self._lock:
-            self._atomic_write_bytes(self.dir / filename, wav_bytes)
-        return filename
+            self._atomic_write_bytes(self.dir / rel, wav_bytes)
+        return rel
+
+    @staticmethod
+    def _persona_dirname(persona) -> str:
+        # Mismo charset que ROOM_NAME_RE (sin puntos: imposibilidad de "../").
+        name = re.sub(r"[^A-Za-z0-9 _-]", "_", str(persona)).strip(" _")
+        return name or "persona"
+
+    def add_audio(self, msg_uuid: str, rel_path: str) -> bool:
+        # Registra el wav guardado en el audio[] del mensaje. El audio puede
+        # llegar ANTES de que el mensaje se appendee (TTS corre en paralelo al
+        # LLM): si no existe todavía, queda encolado y lo drena append().
+        with self._lock:
+            for m in self.history:
+                if m.get("uuid") == msg_uuid:
+                    m["audio"].append(rel_path)
+                    if self.config.get("save_history"):
+                        self._write_history()
+                    return True
+            self._pending_audio.setdefault(msg_uuid, []).append(rel_path)
+            return False
 
     def save_image(self, image_bytes: bytes, ext: str = ".png") -> str | None:
         if not self.config.get("save_history"):

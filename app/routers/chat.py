@@ -85,13 +85,19 @@ def _audio_event(chunk) -> dict:
 
 
 async def _tts_pump(
-    disp, local_q: asyncio.Queue, stop_event: asyncio.Event, drained_event: asyncio.Event
+    disp,
+    local_q: asyncio.Queue,
+    stop_event: asyncio.Event,
+    drained_event: asyncio.Event,
+    room_store=None,
 ) -> None:
     """Mueve audio y notificaciones de falla del dispatcher a local_q.
 
     Único consumidor de audio_q/fail_q de la ronda. Sale cuando stop_event
     está seteado y ambas cajas quedaron vacías (todo el audio ya está en
-    local_q) y señala drained_event.
+    local_q) y señala drained_event. Si room_store se pasa, cada chunk
+    completo se persiste por room/persona (gated por save_audio en
+    RoomStore.save_wav) y se registra en el audio[] del mensaje.
     """
     try:
         while True:
@@ -108,7 +114,14 @@ async def _tts_pump(
                 raise
             for f in done:
                 if f is audio_f:
-                    local_q.put_nowait(_audio_event(audio_f.result()))
+                    chunk = audio_f.result()
+                    if room_store is not None:
+                        rel = room_store.save_wav(
+                            chunk.persona, chunk.message_id, chunk.sentence_id, chunk.audio
+                        )
+                        if rel is not None:
+                            room_store.add_audio(chunk.message_id, rel)
+                    local_q.put_nowait(_audio_event(chunk))
                 elif f is fail_f:
                     local_q.put_nowait(fail_f.result())
             for f in (audio_f, fail_f, stop_f):
@@ -153,7 +166,7 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
         state.dispatcher.reset()
         local_q = asyncio.Queue()
         pump_task = asyncio.create_task(
-            _tts_pump(state.dispatcher, local_q, pump_stop, pump_drained)
+            _tts_pump(state.dispatcher, local_q, pump_stop, pump_drained, room_store)
         )
         yield _sse({"type": "tts_state", "state": "on"})
 
@@ -198,7 +211,9 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                     logger.warning("chat: image description failed: %s", exc)
                     description = None
 
-        room_store.append(new_message("user", "user", req.message, image=image_rel))
+        room_store.append(
+            new_message("user", "user", req.message, image=image_rel, message_uuid=user_message_id)
+        )
 
         if fixed is not None:
             first = fixed[0]
@@ -304,7 +319,11 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 if state.cancel_event.is_set():
                     if tts_on:
                         await state.dispatcher.stop()
-                    room_store.append(new_message("assistant", persona_name, full_text))
+                    room_store.append(
+                        new_message(
+                            "assistant", persona_name, full_text, message_uuid=assistant_message_id
+                        )
+                    )
                     yield _sse(
                         {
                             "type": "done",
@@ -315,7 +334,9 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                     )
                     break
 
-            room_store.append(new_message("assistant", persona_name, full_text))
+            room_store.append(
+                new_message("assistant", persona_name, full_text, message_uuid=assistant_message_id)
+            )
             yield _sse(
                 {
                     "type": "done",

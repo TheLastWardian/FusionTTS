@@ -350,3 +350,64 @@ def test_chat_tts_full_mode_chunks(client):
         assert len(chunk) <= 400
     assert len(chunks[0]) > 120
     assert "".join(chunks).replace(" ", "") == text.replace(" ", "")
+
+
+def _run_tts_chat(c, mock_llm, save_audio: bool):
+    assert (
+        c.post("/api/config", json={"key": "max_persona_replies", "value": 1}).status_code
+        == 200
+    )
+    if not save_audio:
+        assert c.post("/api/config", json={"key": "save_audio", "value": False}).status_code == 200
+    assert c.post("/api/config", json={"key": "tts_enabled", "value": True}).status_code == 200
+    text = (
+        "Hola, amigo mío. Qué gusto saber de ti. Espero que este día esté lleno de cosas bonitas."
+    )
+    words = text.split(" ")
+    mock_llm.stream_responses = [[words[0]] + [f" {w}" for w in words[1:]]]
+    resp = c.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": "random", "chat_room": "test"},
+    )
+    assert resp.status_code == 200
+    return parse_events(resp.text)
+
+
+def test_chat_tts_audio_saved_per_room_persona(client):
+    c, mock_llm, _ = client
+    events = _run_tts_chat(c, mock_llm, save_audio=True)
+    types = [e["type"] for e in events]
+    assert "error" not in types
+    start = events[types.index("start")]
+    persona, msg_id = start["persona"], start["message_id"]
+    n = len([e for e in events if e["type"] == "audio_chunk"])
+    assert n >= 2
+
+    persona_dir = paths.CHATROOMS_DIR / "test" / persona
+    wavs = sorted(persona_dir.glob(f"{msg_id}_*.wav"))
+    assert len(wavs) == n
+    for i, wav in enumerate(wavs):
+        assert wav.name == f"{msg_id}_{i}.wav"
+        assert wav.read_bytes() == b"FAKEWAV"
+
+    history = json.loads(
+        (paths.CHATROOMS_DIR / "test" / "history.json").read_text(encoding="utf-8")
+    )
+    assistant = [m for m in history if m["role"] == "assistant"][-1]
+    assert assistant["uuid"] == msg_id
+    assert assistant["audio"] == [f"{persona}/{msg_id}_{i}.wav" for i in range(n)]
+
+
+def test_chat_tts_audio_not_saved_when_disabled(client):
+    c, mock_llm, _ = client
+    events = _run_tts_chat(c, mock_llm, save_audio=False)
+    types = [e["type"] for e in events]
+    # el streaming sigue funcionando; solo no persiste
+    assert "audio_chunk" in types
+    assert "error" not in types
+    room_dir = paths.CHATROOMS_DIR / "test"
+    assert not list(room_dir.glob("*.wav"))
+    assert not [p for p in room_dir.iterdir() if p.is_dir()]
+    history = json.loads((room_dir / "history.json").read_text(encoding="utf-8"))
+    assistant = [m for m in history if m["role"] == "assistant"][-1]
+    assert assistant["audio"] == []

@@ -67,21 +67,73 @@ def test_append_no_file_when_save_history_off(store, config):
 
 def test_save_wav_disabled(store, config):
     config.set("save_audio", False)
-    assert store.save_wav("abc", 0, b"RIFF-data") is None
-    assert not (store.dir / "abc_0.wav").exists()
+    assert store.save_wav("Jean", "abc", 0, b"RIFF-data") is None
+    assert not (store.dir / "Jean").exists()
 
 
 def test_save_wav_enabled(store):
-    name = store.save_wav("abc-123", 0, b"RIFF-data")
-    assert name == "abc-123_0.wav"
+    name = store.save_wav("Jean", "abc-123", 0, b"RIFF-data")
+    assert name == "Jean/abc-123_0.wav"
     assert (store.dir / name).read_bytes() == b"RIFF-data"
 
 
 def test_save_wav_creates_dir_on_demand(config, tmp_path):
     store = RoomStore("fresh", config, root=tmp_path / "chatrooms")
-    name = store.save_wav("u1", 2, b"data")
-    assert name == "u1_2.wav"
+    name = store.save_wav("Fischl", "u1", 2, b"data")
+    assert name == "Fischl/u1_2.wav"
     assert (store.dir / name).is_file()
+
+
+def test_save_wav_persona_dir_sanitized_no_escape(store):
+    name = store.save_wav("a/b\\c..d!", "u1", 0, b"data")
+    assert ".." not in name
+    assert name == "a_b_c__d/u1_0.wav"
+    path = store.dir / name
+    assert path.is_file()
+    assert path.resolve().is_relative_to(store.dir.resolve())
+
+
+def test_save_wav_persona_empty_fallback(store):
+    name = store.save_wav("!!!", "u1", 0, b"data")
+    assert name == "persona/u1_0.wav"
+    assert (store.dir / name).is_file()
+
+
+def test_add_audio_appends_to_message_and_rewrites(store, config):
+    m = msg(uuid="u1")
+    store.append(m)
+    assert store.add_audio("u1", "Jean/u1_0.wav") is True
+    assert m["audio"] == ["Jean/u1_0.wav"]
+    data = json.loads(store.history_path.read_text(encoding="utf-8"))
+    assert data[0]["audio"] == ["Jean/u1_0.wav"]
+
+
+def test_add_audio_before_append_flushed_on_append(store, config):
+    # race real: el TTS entrega audio antes de que el mensaje se appendee
+    assert store.add_audio("u1", "Jean/u1_0.wav") is False
+    m = msg(uuid="u1")
+    store.append(m)
+    assert m["audio"] == ["Jean/u1_0.wav"]
+    data = json.loads(store.history_path.read_text(encoding="utf-8"))
+    assert data[0]["audio"] == ["Jean/u1_0.wav"]
+    assert store.add_audio("u1", "Jean/u1_1.wav") is True
+    data = json.loads(store.history_path.read_text(encoding="utf-8"))
+    assert data[0]["audio"] == ["Jean/u1_0.wav", "Jean/u1_1.wav"]
+
+
+def test_add_audio_unknown_uuid_buffers(store, config):
+    assert store.add_audio("nunca", "Jean/x_0.wav") is False
+    assert store._pending_audio == {"nunca": ["Jean/x_0.wav"]}
+    assert store.history == []
+
+
+def test_add_audio_in_memory_only_when_save_history_off(store, config):
+    config.set("save_history", False)
+    m = msg(uuid="u1")
+    store.append(m)
+    assert store.add_audio("u1", "Jean/u1_0.wav") is True
+    assert m["audio"] == ["Jean/u1_0.wav"]
+    assert not store.history_path.exists()
 
 
 def test_save_image_creates_file(store):
@@ -177,14 +229,15 @@ def test_concurrent_appends(store, config):
 
 def test_no_tmp_leftovers(store):
     store.append(msg())
-    store.save_wav("u1", 0, b"data")
+    store.save_wav("Jean", "u1", 0, b"data")
     store.save_image(b"x")
     assert not list(store.dir.glob("*.tmp"))
+    assert not list(store.dir.glob("**/*.tmp"))
 
 
 def test_delete_removes_directory(store):
     store.append(msg())
-    store.save_wav("u1", 0, b"data")
+    store.save_wav("Jean", "u1", 0, b"data")
     store.save_image(b"x")
     assert store.dir.exists()
     store.delete()

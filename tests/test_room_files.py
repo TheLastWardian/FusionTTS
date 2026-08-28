@@ -11,7 +11,7 @@ def _seed_room(client, room):
 
 def test_room_file_wav_200(client):
     store = _seed_room(client, "r1")
-    fn = store.save_wav(store.history[0]["uuid"], 0, b"RIFF-fake")
+    fn = store.save_wav("Jean", store.history[0]["uuid"], 0, b"RIFF-fake")
     r = client.get(f"/api/rooms/r1/file/{fn}")
     assert r.status_code == 200
     assert r.headers["content-type"] == "audio/wav"
