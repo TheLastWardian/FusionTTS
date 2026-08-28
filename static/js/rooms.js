@@ -1,52 +1,67 @@
-// rooms.js — lista de rooms en la sidebar, switching, echo chamber y creación de room nuevo.
+// rooms.js — lista de rooms en la sidebar (main fija + rooms creadas), switching, echo chamber y creación con asignación de personajes.
 import { state } from "./state.js";
 import { api, toast } from "./utils.js";
 import { cancelChat } from "./chat.js";
 import { loadHistory } from "./persistence.js";
 
+const MAIN_ROOM = "default";
+const MAIN_LABEL = "main";
+
+function mainRow() {
+  const row = document.createElement("div");
+  row.className = "room-row";
+  const b = document.createElement("button");
+  b.className = "room-item" + (state.room === MAIN_ROOM ? " active" : "");
+  const i = document.createElement("i");
+  i.className = "ti ti-home";
+  const span = document.createElement("span");
+  span.textContent = MAIN_LABEL;
+  b.append(i, span);
+  b.title = "Todos los personajes";
+  b.addEventListener("click", () => switchRoom(MAIN_ROOM));
+  row.appendChild(b);
+  return row;
+}
+
+function roomRow(r) {
+  const row = document.createElement("div");
+  row.className = "room-row";
+  const b = document.createElement("button");
+  b.className = "room-item" + (r.name === state.room ? " active" : "");
+  const i = document.createElement("i");
+  i.className = "ti ti-messages";
+  const span = document.createElement("span");
+  span.textContent = r.name;
+  b.append(i, span);
+  b.addEventListener("click", () => switchRoom(r.name));
+  const echo = document.createElement("button");
+  echo.className = "room-echo" + (r.echo_chamber ? " on" : "");
+  echo.title = "Echo chamber";
+  const ei = document.createElement("i");
+  ei.className = "ti ti-repeat";
+  echo.appendChild(ei);
+  echo.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleEcho(r.name);
+  });
+  row.append(b, echo);
+  return row;
+}
+
 function renderRooms() {
   const list = document.getElementById("room-list");
   list.textContent = "";
-  if (state.rooms.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "list-empty";
-    empty.textContent = "Sin rooms";
-    list.appendChild(empty);
-  }
-  for (const r of state.rooms) {
-    const row = document.createElement("div");
-    row.className = "room-row";
-    const b = document.createElement("button");
-    b.className = "room-item" + (r.name === state.room ? " active" : "");
-    const i = document.createElement("i");
-    i.className = "ti ti-messages";
-    const span = document.createElement("span");
-    span.textContent = r.name;
-    b.append(i, span);
-    b.addEventListener("click", () => switchRoom(r.name));
-    const echo = document.createElement("button");
-    echo.className = "room-echo" + (r.echo_chamber ? " on" : "");
-    echo.title = "Echo chamber";
-    const ei = document.createElement("i");
-    ei.className = "ti ti-repeat";
-    echo.appendChild(ei);
-    echo.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleEcho(r.name);
-    });
-    row.append(b, echo);
-    list.appendChild(row);
-  }
+  list.appendChild(mainRow());
+  for (const r of state.rooms) list.appendChild(roomRow(r));
 }
 
 async function switchRoom(name) {
   if (name === state.room) return;
   if (state.streaming) await cancelChat();
   state.room = name;
-  saveActiveRoom();
   renderRooms();
   updateLabel();
-  toast("Room: " + name, "info");
+  toast("Room: " + (name === MAIN_ROOM ? MAIN_LABEL : name), "info");
   await loadHistory(name);
 }
 
@@ -71,32 +86,13 @@ async function toggleEcho(name) {
 }
 
 function updateLabel() {
-  document.getElementById("room-label").textContent = state.room;
-}
-
-function saveActiveRoom() {
-  try {
-    localStorage.setItem("ftts.room", state.room);
-  } catch {
-  }
-}
-
-function restoreActiveRoom() {
-  try {
-    const saved = localStorage.getItem("ftts.room");
-    if (saved && state.rooms.some((r) => r.name === saved)) state.room = saved;
-  } catch {
-  }
+  document.getElementById("room-label").textContent =
+    state.room === MAIN_ROOM ? MAIN_LABEL : state.room;
 }
 
 export async function initRooms() {
   const data = await api("/api/rooms");
   state.rooms = data.rooms || [];
-  restoreActiveRoom();
-  if (state.rooms.length > 0 && !state.rooms.some((r) => r.name === state.room)) {
-    state.room = state.rooms[0].name;
-  }
-  saveActiveRoom();
   renderRooms();
   updateLabel();
 
@@ -104,6 +100,24 @@ export async function initRooms() {
   const input = document.getElementById("room-name");
   const newBtn = document.getElementById("btn-new-room");
   const okBtn = document.getElementById("room-form-ok");
+  const checksEl = document.getElementById("room-form-personas");
+
+  const buildChecks = () => {
+    checksEl.textContent = "";
+    for (const p of state.personas) {
+      const label = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = p.name;
+      const s = document.createElement("span");
+      s.textContent = p.name;
+      label.append(cb, s);
+      checksEl.appendChild(label);
+    }
+  };
+
+  const selectedNames = () =>
+    [...checksEl.querySelectorAll("input[type=checkbox]:checked")].map((cb) => cb.value);
 
   const closeForm = () => {
     form.hidden = true;
@@ -114,18 +128,18 @@ export async function initRooms() {
   const submit = async () => {
     const name = input.value.trim();
     if (!name) return;
+    const names = selectedNames();
+    if (names.length === 0) {
+      toast("Elegí al menos 1 personaje para la room", "error");
+      return;
+    }
     try {
       const created = await api("/api/rooms", {
         method: "POST",
-        body: {
-          name,
-          persona_names: state.personas.map((p) => p.name),
-          echo_chamber: false,
-        },
+        body: { name, persona_names: names, echo_chamber: false },
       });
       state.rooms.push(created);
       state.room = created.name;
-      saveActiveRoom();
       closeForm();
       renderRooms();
       updateLabel();
@@ -137,6 +151,11 @@ export async function initRooms() {
   };
 
   newBtn.addEventListener("click", () => {
+    if (state.personas.length === 0) {
+      toast("Personas todavía no cargadas", "error");
+      return;
+    }
+    buildChecks();
     form.hidden = false;
     newBtn.hidden = true;
     input.value = "";

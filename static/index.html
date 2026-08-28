@@ -58,8 +58,11 @@
       <div class="section-head section-head-plain">Rooms</div>
       <div id="room-list"></div>
       <div class="room-form" id="room-form" hidden>
-        <input type="text" id="room-name" placeholder="nombre del room" maxlength="64" spellcheck="false">
-        <button class="room-form-btn" id="room-form-ok" title="Crear room" aria-label="Crear room"><i class="ti ti-check"></i></button>
+        <div class="room-form-inner">
+          <input type="text" id="room-name" placeholder="nombre del room" maxlength="64" spellcheck="false">
+          <button class="room-form-btn" id="room-form-ok" title="Crear room" aria-label="Crear room"><i class="ti ti-check"></i></button>
+        </div>
+        <div class="persona-checks" id="room-form-personas"></div>
       </div>
       <button class="room-item" id="btn-new-room"><i class="ti ti-plus"></i> New room</button>
     </div>
