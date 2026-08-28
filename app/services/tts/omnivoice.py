@@ -113,6 +113,7 @@ class OmniVoiceEngine:
             env["PORT"] = str(port)
             env["HOST"] = "127.0.0.1"
             env["HF_HUB_OFFLINE"] = "1"
+            env["OMNIVOICE_INT8"] = "1" if self._config.get("tts_int8") else "0"
             if self._proc_log is not None:
                 self._proc_log.close()
                 self._proc_log = None

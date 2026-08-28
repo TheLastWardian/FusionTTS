@@ -25,6 +25,7 @@ ALL_KEYS = {
     "silence_ms",
     "tts_server_python",
     "tts_server_port",
+    "tts_int8",
     "asr_model",
     "asr_device",
     "asr_timeout",

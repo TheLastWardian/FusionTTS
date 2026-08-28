@@ -50,6 +50,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 MODEL_NAME = os.getenv("OMNIVOICE_MODEL", "k2-fsa/OmniVoice")
+# Cuantizacion INT8 weight-only (bitsandbytes): ~600 MB en vez de ~1.2 GB en VRAM
+# para los pesos del LLM. Lo setea el app al spawnear (tts_int8 en settings).
+INT8 = os.getenv("OMNIVOICE_INT8", "0") == "1"
 
 
 def _cuda_available() -> bool:
@@ -96,15 +99,15 @@ def _load_model_impl():
     global _model
     if _TORCH is None:
         raise RuntimeError("torch no disponible")
-    logger.info("Cargando OmniVoice: %s en %s (BF16) ...", MODEL_NAME, DEVICE)
+    mode = "BF16+INT8" if INT8 else "BF16"
+    logger.info("Cargando OmniVoice: %s en %s (%s) ...", MODEL_NAME, DEVICE, mode)
     from omnivoice import OmniVoice
 
-    m = OmniVoice.from_pretrained(
-        MODEL_NAME,
-        device_map=DEVICE,
-        torch_dtype=_TORCH.bfloat16,
-    )
-    logger.info("OmniVoice BF16 cargado correctamente.")
+    kwargs = {"device_map": DEVICE, "torch_dtype": _TORCH.bfloat16}
+    if INT8:
+        kwargs["load_in_8bit"] = True
+    m = OmniVoice.from_pretrained(MODEL_NAME, **kwargs)
+    logger.info("OmniVoice %s cargado correctamente.", mode)
     _model = m
     return m
 
