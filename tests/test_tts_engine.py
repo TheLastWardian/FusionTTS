@@ -219,6 +219,16 @@ async def test_05_synthesize_body_and_result(make_engine):
     }
 
 
+async def test_05b_synthesize_language_empty_auto(make_engine):
+    engine, config = make_engine()
+    config.set("tts_language", "")
+    await engine.start()
+    await engine.synthesize("hola")
+    port = config.get("tts_server_port")
+    calls = (await _get(port, "/calls"))["calls"]
+    assert calls[-1]["language"] == ""
+
+
 async def test_06_stop_then_synthesize_auto_load(make_engine):
     engine, config = make_engine()
     await engine.start()

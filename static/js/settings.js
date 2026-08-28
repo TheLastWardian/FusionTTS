@@ -20,7 +20,7 @@ const FIELDS = [
       { key: "tts_num_steps", type: "range", min: 1, max: 100, step: 1, kind: "int", label: "Steps" },
       { key: "tts_guidance_scale", type: "range", min: 0.1, max: 3, step: 0.1, kind: "float", label: "Guidance" },
       { key: "tts_speed", type: "range", min: 0.5, max: 2, step: 0.05, kind: "float", label: "Speed" },
-      { key: "tts_language", type: "text", label: "Language", placeholder: "en" },
+      { key: "tts_language", type: "select", label: "Language (auto = detectar por persona)" },
       { key: "tts_instruct", type: "textarea", label: "Instruct" },
       { key: "tts_seed", type: "number", min: 0, max: 4294967295, label: "Seed", placeholder: "vacío = aleatorio", nullable: true },
       { key: "tts_sentence_timeout", type: "range", min: 5, max: 300, step: 1, kind: "int", label: "Timeout", suffix: " s" },
@@ -88,8 +88,55 @@ function setControl(key, value) {
     c.input.setAttribute("aria-pressed", value ? "true" : "false");
     return;
   }
+  if (key === "tts_language") {
+    c.input.value = value === null || value === undefined || value === "" ? "auto" : String(value);
+    return;
+  }
   c.input.value = value === null || value === undefined ? "" : String(value);
   if (c.readout) c.readout.textContent = fmtValue(value, c.field);
+}
+
+function ttsLanguageOptions() {
+  const opts = ["auto", "en"];
+  const extra = new Set();
+  for (const p of state.personas) {
+    if (p.reference_audio_language) extra.add(p.reference_audio_language);
+  }
+  for (const l of [...extra].sort()) opts.push(l);
+  return opts;
+}
+
+function ttsLanguageDisplay() {
+  const v = state.config.tts_language;
+  return v === null || v === undefined || v === "" ? "auto" : String(v);
+}
+
+// Opciones = auto + en + idiomas detectados en los audios de referencia de las
+// personas. Si el valor guardado ya no existe (p. ej. se borro la persona cuyo
+// audio era el unico en ese idioma) -> vuelve al default "en" con aviso.
+export function refreshTtsLanguageOptions() {
+  const c = controls["tts_language"];
+  const opts = ttsLanguageOptions();
+  const cur = ttsLanguageDisplay();
+  if (c) {
+    const input = c.input;
+    input.textContent = "";
+    for (const o of opts) {
+      const el = document.createElement("option");
+      el.value = o;
+      el.textContent = o === "auto" ? "auto (detectar por persona)" : o;
+      input.appendChild(el);
+    }
+  }
+  if (!opts.includes(cur)) {
+    if (c) c.input.value = "en";
+    if (state.config.tts_language !== "en") {
+      toast(`tts_language "${cur}" ya no está disponible; vuelvo a "en"`, "warning");
+      scheduleSave("tts_language", "en");
+    }
+    return;
+  }
+  if (c) c.input.value = cur;
 }
 
 function buildField(f) {
@@ -123,7 +170,7 @@ function buildField(f) {
     const label = document.createElement("label");
     label.textContent = f.label;
     input = document.createElement("select");
-    for (const opt of f.options) {
+    for (const opt of f.options || []) {
       const o = document.createElement("option");
       o.value = opt;
       o.textContent = opt;
@@ -152,7 +199,8 @@ function buildField(f) {
   }
 
   controls[f.key] = { field: f, input, readout };
-  setControl(f.key, state.config[f.key]);
+  if (f.key === "tts_language") refreshTtsLanguageOptions();
+  else setControl(f.key, state.config[f.key]);
   wireField(f.key);
   return wrap;
 }
@@ -173,7 +221,10 @@ function wireField(key) {
       scheduleSave(key, next);
     });
   } else if (f.type === "select") {
-    input.addEventListener("change", () => scheduleSave(key, input.value));
+    input.addEventListener("change", () => {
+      const v = key === "tts_language" && input.value === "auto" ? "" : input.value;
+      scheduleSave(key, v);
+    });
   } else if (f.type === "number") {
     input.addEventListener("change", () => {
       if (input.value === "") {

@@ -1,6 +1,7 @@
 // personas.js — sidebar de personas, who-chips, upload de .wav en 2 fases (draft → aceptar/rechazar) y editor de persona.
 import { state } from "./state.js";
 import { api, avatarCss, initials, toast } from "./utils.js";
+import { refreshTtsLanguageOptions } from "./settings.js";
 
 let uploading = false;
 let draft = null;
@@ -609,6 +610,7 @@ async function refreshPersonas() {
   state.personas = (await api("/api/personas")).personas || [];
   renderSidebar();
   renderWhoChips();
+  refreshTtsLanguageOptions();
 }
 
 export async function initPersonas() {
