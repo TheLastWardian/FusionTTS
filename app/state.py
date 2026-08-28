@@ -18,6 +18,8 @@ class AppState:
         self.tts_engine: Any = None
         self.dispatcher: Any = None
         self.asr_manager: Any = None
+        self.pending_personas: dict[str, dict] = {}
+        self.pending_personas_lock = threading.Lock()
         self._room_stores: dict[str, RoomStore] = {}
         self._room_stores_lock = threading.Lock()
         self.cancel_event = asyncio.Event()

@@ -1,3 +1,4 @@
+import shutil
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
     setup_logging()
     config = ConfigStore()
     state = AppState(config)
+    shutil.rmtree(paths.PERSONAS_PENDING_DIR, ignore_errors=True)
     state.llm = LLMClient(config)
     state.tts_engine = create_engine(config.get("tts_engine"), config)
     state.asr_manager = ASRManager(config)

@@ -1,13 +1,21 @@
 import json
 import logging
 import re
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
+from app import paths
 from app.personas import PersonaExistsError
-from app.schemas import PERSONA_NAME_RE, Persona, TranscriptUpdate
+from app.schemas import (
+    PERSONA_NAME_RE,
+    Persona,
+    PersonaDraftAccept,
+    PersonaRename,
+    TranscriptUpdate,
+)
 from app.services.asr.engine import ASREngineError, ASRError
 from app.services.llm import LLMError
 
@@ -162,8 +170,25 @@ def _remove_quietly(path: Path) -> None:
         logger.warning("from-audio: no se pudo borrar %s: %s", path, exc)
 
 
+def _remove_quietly_dir(path: Path) -> None:
+    try:
+        path.rmdir()
+    except OSError:
+        pass
+
+
 def _persona_store(request: Request):
     return request.app.state.app_state.personas
+
+
+def _pending_dir() -> Path:
+    return Path(paths.PERSONAS_PENDING_DIR)
+
+
+def _get_draft(state, token: str) -> dict | None:
+    with state.pending_personas_lock:
+        draft = state.pending_personas.get(token)
+        return dict(draft) if draft is not None else None
 
 
 def _with_tts_capable(persona: dict) -> dict:
@@ -298,6 +323,29 @@ async def delete_persona(request: Request, name: str) -> dict:
     return {"deleted": name}
 
 
+@router.post("/personas/{name}/rename")
+async def rename_persona(request: Request, name: str, payload: PersonaRename) -> dict:
+    state = request.app.state.app_state
+    store = _persona_store(request)
+    new_name = payload.name
+    current = store.get(name)
+    if current is None:
+        raise HTTPException(status_code=404, detail=f"persona not found: {name}")
+    if new_name == name:
+        return _with_tts_capable(current)
+    if store.get(new_name) is not None:
+        raise HTTPException(status_code=409, detail=f"persona already exists: {new_name}")
+    try:
+        renamed = store.rename(name, new_name)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"persona not found: {name}")
+    except PersonaExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if state.rooms is not None:
+        state.rooms.rename_persona(name, new_name)
+    return _with_tts_capable(renamed)
+
+
 @router.post("/personas/from-audio")
 async def create_persona_from_audio(
     request: Request,
@@ -330,9 +378,10 @@ async def create_persona_from_audio(
             status_code=400, detail="no se pudo derivar un nombre de archivo valido del filename"
         )
 
-    wav_path = store.audio_dir / f"{stem}.wav"
-    txt_path = store.audio_dir / f"{stem}.txt"
-    wav_path.parent.mkdir(parents=True, exist_ok=True)
+    pending_dir = _pending_dir()
+    wav_path = pending_dir / f"{stem}.wav"
+    txt_path = pending_dir / f"{stem}.txt"
+    pending_dir.mkdir(parents=True, exist_ok=True)
     wav_path.write_bytes(await file.read())
 
     try:
@@ -348,36 +397,126 @@ async def create_persona_from_audio(
         )
         if warning:
             logger.warning("from-audio (%s): %s", filename, warning)
-        created = store.create(
-            {
-                **persona,
-                "reference_audio": f"{store.audio_dir.name}/{stem}.wav",
-                "reference_audio_transcript": f"{store.audio_dir.name}/{stem}.txt",
-                "reference_audio_language": persona_language,
-            }
-        )
-        return {
-            **_with_tts_capable(created),
+    except HTTPException:
+        _remove_quietly(wav_path)
+        _remove_quietly(txt_path)
+        _remove_quietly_dir(pending_dir)
+        raise
+
+    token = uuid.uuid4().hex[:12]
+    with state.pending_personas_lock:
+        state.pending_personas[token] = {
+            "stem": stem,
+            "language": persona_language,
+            "persona": persona,
             "transcript": transcript,
             "generated": generated,
             "warning": warning,
         }
-    except HTTPException:
-        _remove_quietly(wav_path)
-        _remove_quietly(txt_path)
-        raise
+    return {
+        "token": token,
+        "name": persona["name"],
+        "description": persona["description"],
+        "system_prompt": persona["system_prompt"],
+        "avatar_color": persona["avatar_color"],
+        "language": persona_language,
+        "transcript": transcript,
+        "generated": generated,
+        "warning": warning,
+    }
+
+
+@router.post("/personas/pending/{token}/accept")
+async def accept_pending_persona(
+    request: Request, token: str, payload: PersonaDraftAccept
+) -> dict:
+    state = request.app.state.app_state
+    store = _persona_store(request)
+    draft = _get_draft(state, token)
+    if draft is None:
+        raise HTTPException(status_code=404, detail=f"draft not found: {token}")
+    if store.get(payload.name) is not None:
+        raise HTTPException(status_code=409, detail=f"persona ya existe: {payload.name}")
+
+    base_stem = draft["stem"]
+    audio_dir = store.audio_dir
+    stem = base_stem
+    if (audio_dir / f"{stem}.wav").exists() or (audio_dir / f"{stem}.txt").exists():
+        stem = f"{base_stem}-{token[:6]}"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    pending_dir = _pending_dir()
+    wav_dst = audio_dir / f"{stem}.wav"
+    txt_dst = audio_dir / f"{stem}.txt"
+    (pending_dir / f"{base_stem}.wav").replace(wav_dst)
+    (pending_dir / f"{base_stem}.txt").replace(txt_dst)
+    _remove_quietly_dir(pending_dir)
+
+    persona = dict(draft["persona"])
+    color = payload.color.strip()
+    try:
+        created = store.create(
+            {
+                **persona,
+                "name": payload.name,
+                "description": payload.description,
+                "system_prompt": payload.system_prompt,
+                "avatar_color": color if _HEX_COLOR.fullmatch(color) else _DEFAULT_COLOR,
+                "reference_audio": f"{audio_dir.name}/{stem}.wav",
+                "reference_audio_transcript": f"{audio_dir.name}/{stem}.txt",
+                "reference_audio_language": draft["language"],
+            }
+        )
     except PersonaExistsError as exc:
-        _remove_quietly(wav_path)
-        _remove_quietly(txt_path)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ValueError as exc:
-        _remove_quietly(wav_path)
-        _remove_quietly(txt_path)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    txt_dst.write_text(payload.transcript, encoding="utf-8")
+
+    with state.pending_personas_lock:
+        state.pending_personas.pop(token, None)
+    return {
+        **_with_tts_capable(created),
+        "transcript": payload.transcript,
+        "generated": draft["generated"],
+        "warning": draft["warning"],
+    }
+
+
+@router.delete("/personas/pending/{token}")
+async def reject_pending_persona(request: Request, token: str) -> dict:
+    state = request.app.state.app_state
+    with state.pending_personas_lock:
+        draft = state.pending_personas.pop(token, None)
+    if draft is None:
+        raise HTTPException(status_code=404, detail=f"draft not found: {token}")
+    pending_dir = _pending_dir()
+    _remove_quietly(pending_dir / f"{draft['stem']}.wav")
+    _remove_quietly(pending_dir / f"{draft['stem']}.txt")
+    _remove_quietly_dir(pending_dir)
+    return {"rejected": token}
+
+
+@router.post("/personas/pending/{token}/retranscribe")
+async def retranscribe_pending_persona(request: Request, token: str) -> dict:
+    state = request.app.state.app_state
+    draft = _get_draft(state, token)
+    if draft is None:
+        raise HTTPException(status_code=404, detail=f"draft not found: {token}")
+    pending_dir = _pending_dir()
+    wav_path = pending_dir / f"{draft['stem']}.wav"
+    txt_path = pending_dir / f"{draft['stem']}.txt"
+    try:
+        transcript = await state.asr_manager.transcribe(wav_path, language=draft["language"])
+    except ASRError as exc:
+        detail = exc.detail if isinstance(exc, ASREngineError) else str(exc)
+        raise HTTPException(status_code=502, detail=f"ASR fallo: {detail}") from exc
+    try:
+        txt_path.parent.mkdir(parents=True, exist_ok=True)
+        txt_path.write_text(transcript, encoding="utf-8")
     except OSError as exc:
-        _remove_quietly(wav_path)
-        _remove_quietly(txt_path)
         raise HTTPException(status_code=500, detail=f"error de archivo: {exc}") from exc
+    with state.pending_personas_lock:
+        if token in state.pending_personas:
+            state.pending_personas[token]["transcript"] = transcript
+    return {"transcript": transcript}
 
 
 @router.get("/persona-audio/{filename:path}")

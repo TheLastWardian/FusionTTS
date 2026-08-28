@@ -133,6 +133,20 @@ class RoomConfigStore:
                 self._persist_locked()
             return changed
 
+    def rename_persona(self, old_name: str, new_name: str) -> bool:
+        with self._lock:
+            changed = False
+            for room in self._rooms:
+                names = room.get("persona_names")
+                if isinstance(names, list) and old_name in names:
+                    room["persona_names"] = [
+                        new_name if n == old_name else n for n in names
+                    ]
+                    changed = True
+            if changed:
+                self._persist_locked()
+            return changed
+
     def _validate(self, room: dict) -> dict:
         try:
             data = Room.model_validate(room).model_dump()

@@ -34,6 +34,18 @@ class TranscriptUpdate(BaseModel):
     transcript: str
 
 
+class PersonaRename(BaseModel):
+    name: str = Field(min_length=1, pattern=PERSONA_NAME_RE)
+
+
+class PersonaDraftAccept(BaseModel):
+    name: str = Field(min_length=1, pattern=PERSONA_NAME_RE)
+    description: str
+    system_prompt: str
+    color: str
+    transcript: str
+
+
 class Room(BaseModel):
     name: str
     persona_names: list[str]

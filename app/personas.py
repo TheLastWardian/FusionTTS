@@ -108,6 +108,23 @@ class PersonaStore:
             self._persist_locked()
             return dict(validated)
 
+    def rename(self, old_name: str, new_name: str) -> dict:
+        with self._lock:
+            index = next(
+                (i for i, p in enumerate(self._personas) if p.get("name") == old_name),
+                None,
+            )
+            if index is None:
+                raise KeyError(old_name)
+            if any(p.get("name") == new_name for p in self._personas):
+                raise PersonaExistsError(f"persona already exists: {new_name}")
+            candidate = dict(self._personas[index])
+            candidate["name"] = new_name
+            validated = self._validate(candidate)
+            self._personas[index] = validated
+            self._persist_locked()
+            return dict(validated)
+
     def delete(self, name: str) -> None:
         with self._lock:
             index = next(
