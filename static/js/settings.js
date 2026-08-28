@@ -97,13 +97,11 @@ function setControl(key, value) {
 }
 
 function ttsLanguageOptions() {
-  const opts = ["auto", "en"];
-  const extra = new Set();
+  const langs = new Set(["auto", "en"]);
   for (const p of state.personas) {
-    if (p.reference_audio_language) extra.add(p.reference_audio_language);
+    if (p.reference_audio_language) langs.add(p.reference_audio_language);
   }
-  for (const l of [...extra].sort()) opts.push(l);
-  return opts;
+  return ["auto", "en", ...[...langs].filter((l) => l !== "auto" && l !== "en").sort()];
 }
 
 function ttsLanguageDisplay() {
