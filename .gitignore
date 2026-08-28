@@ -13,6 +13,11 @@ settings.json
 tts_e2e_results/
 logs/
 
+# Datos por usuario (cada usuario trae los suyos)
+personas.yaml
+chatrooms.yaml
+personas_audio/
+
 # Temporales
 *.tmp
 .tts_cancel.signal
