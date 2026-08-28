@@ -178,16 +178,7 @@ function finalizeBubble(b, fullText) {
   replay.appendChild(ri);
   let replayBusy = false;
   const hasSaved = () => !!(b.savedAudio && b.savedAudio.length);
-  replay.addEventListener("click", async () => {
-    if (replay.disabled || replayBusy) return;
-    replayBusy = true;
-    replay.disabled = true;
-    ri.className = "ti ti-loader spinning";
-    if (ttsReady()) {
-      await replayTTS(b.textEl.textContent, b.persona);
-    } else if (hasSaved()) {
-      await playSavedSequence(state.room, b.savedAudio);
-    }
+  const finishReplay = () => {
     replayBusy = false;
     ri.className = "ti ti-volume";
     replay.disabled = !ttsReady() && !hasSaved();
@@ -196,6 +187,21 @@ function finalizeBubble(b, fullText) {
       : hasSaved()
         ? "Reproducir (archivo guardado)"
         : "TTS desactivado";
+  };
+  replay.addEventListener("click", async () => {
+    if (replay.disabled || replayBusy) return;
+    replayBusy = true;
+    replay.disabled = true;
+    ri.className = "ti ti-loader spinning";
+    if (ttsReady()) {
+      await replayTTS(b.textEl.textContent, b.persona);
+      finishReplay();
+    } else if (hasSaved()) {
+      // el play del primer archivo corre de forma sincrona en el click
+      playSavedSequence(state.room, b.savedAudio, finishReplay);
+    } else {
+      finishReplay();
+    }
   });
   const del = document.createElement("button");
   del.className = "msg-act msg-act-delete";

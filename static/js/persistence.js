@@ -9,84 +9,118 @@ let seqToken = null;
 export function stopHistoryAudio() {
   if (!playing) return;
   playing.audio.pause();
-  URL.revokeObjectURL(playing.url);
   playing.iconEl.className = "ti ti-music";
   playing.btn.title = playing.filename;
   playing = null;
 }
 
+function fileUrl(room, filename) {
+  return "/api/rooms/" + encodeURIComponent(room) + "/file/" + encodeURIComponent(filename);
+}
+
+// IMPORTANTE: play() se llama SIEMPRE de forma sincrona dentro del click.
+// Con fetch+blob habia una brecha async: si el server estaba ocupado (LLM/TTS
+// corriendo) el fetch excedia la ventana de "user activation" del navegador y
+// play() rechazaba con NotAllowedError (autoplay).
+
 // Reproduce en secuencia los wavs guardados de un mensaje (fallback del
 // boton replay cuando el TTS esta apagado).
+let seqAudio = null;
+let seqOnDone = null;
+
 export function stopSavedSequence() {
+  if (seqAudio) {
+    seqAudio.onended = null;
+    seqAudio.pause();
+    seqAudio = null;
+  }
   if (seqToken) {
+    const cb = seqOnDone;
     seqToken.stopped = true;
     seqToken = null;
+    seqOnDone = null;
+    if (cb) cb();
   }
 }
 
-export async function playSavedSequence(room, filenames) {
+export function playSavedSequence(room, filenames, onDone) {
   stopSavedSequence();
   const token = { stopped: false };
   seqToken = token;
-  for (const f of filenames) {
-    if (token.stopped) return;
-    let res;
-    try {
-      res = await fetch("/api/rooms/" + encodeURIComponent(room) + "/file/" + encodeURIComponent(f));
-    } catch (err) {
-      toast("No se pudo cargar el audio: " + (err && err.message ? err.message : String(err)), "error");
+  seqOnDone = onDone || null;
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    if (seqToken === token) seqToken = null;
+    if (seqOnDone === (onDone || null)) seqOnDone = null;
+    if (onDone) onDone();
+  };
+  let i = 0;
+  const playNext = () => {
+    if (token.stopped || finished) return;
+    if (i >= filenames.length) {
+      finish();
       return;
     }
-    if (!res.ok) {
-      toast("No se pudo cargar el audio (HTTP " + res.status + ")", "error");
-      return;
-    }
-    const url = URL.createObjectURL(await res.blob());
-    const audio = new Audio(url);
-    await new Promise((resolve) => {
-      audio.onended = resolve;
-      audio.onerror = resolve;
-      audio.play().catch(() => resolve());
+    const f = filenames[i++];
+    const audio = new Audio(fileUrl(room, f));
+    seqAudio = audio;
+    audio.onended = playNext;
+    audio.onerror = () => {
+      toast("No se pudo cargar el audio (" + f + ")", "error");
+      finish();
+    };
+    audio.play().catch((err) => {
+      if (token.stopped || finished) return;
+      toast(
+        err && err.name === "NotAllowedError"
+          ? "El navegador bloqueo el audio (autoplay)"
+          : "No se pudo reproducir el audio",
+        "error",
+      );
+      finish();
     });
-    URL.revokeObjectURL(url);
-  }
-  if (seqToken === token) seqToken = null;
+  };
+  playNext();
 }
 
-async function playHistoryAudio(btn, room, filename) {
+function playHistoryAudio(btn, room, filename) {
   if (playing && playing.btn === btn) {
     stopHistoryAudio();
     return;
   }
   stopHistoryAudio();
   const iconEl = btn.querySelector("i");
-  iconEl.className = "ti ti-loader spinning";
-  let res;
-  try {
-    res = await fetch("/api/rooms/" + encodeURIComponent(room) + "/file/" + encodeURIComponent(filename));
-  } catch (err) {
+  const audio = new Audio(fileUrl(room, filename));
+  audio.onerror = () => {
+    if (playing && playing.btn === btn) playing = null;
     iconEl.className = "ti ti-music";
-    toast("No se pudo cargar el audio: " + (err && err.message ? err.message : String(err)), "error");
-    return;
-  }
-  if (!res.ok) {
-    iconEl.className = "ti ti-music";
-    toast("No se pudo cargar el audio (HTTP " + res.status + ")", "error");
-    return;
-  }
-  const url = URL.createObjectURL(await res.blob());
-  const audio = new Audio(url);
+    btn.title = filename;
+    toast("No se pudo cargar el audio", "error");
+  };
   audio.onended = () => stopHistoryAudio();
-  playing = { btn, iconEl, audio, url, filename };
-  try {
-    await audio.play();
-  } catch {
-    stopHistoryAudio();
-    toast("No se pudo reproducir el audio", "error");
-    return;
-  }
-  iconEl.className = "ti ti-player-stop";
-  btn.title = "Detener";
+  playing = { btn, iconEl, audio, filename };
+  iconEl.className = "ti ti-loader spinning";
+  audio
+    .play()
+    .then(
+      () => {
+        iconEl.className = "ti ti-player-stop";
+        btn.title = "Detener";
+      },
+      (err) => {
+        if (playing && playing.btn === btn) playing = null;
+        iconEl.className = "ti ti-music";
+        btn.title = filename;
+        toast(
+          err && err.name === "NotAllowedError"
+            ? "El navegador bloqueo el audio (autoplay)"
+            : "No se pudo reproducir el audio",
+          "error",
+        );
+      },
+    );
 }
 
 function showEmptyState(el) {
