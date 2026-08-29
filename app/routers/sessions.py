@@ -3,7 +3,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from app.schemas import MessageTextUpdate
+from app.persistence import ReprocessBlocked
+from app.schemas import MessageTextUpdate, ReprocessRequest
 from app.services.chat_context import build_llm_messages, build_system_prompt
 from app.services.llm import LLMError
 from app.services.persona_router import resolve_room_personas
@@ -102,6 +103,34 @@ async def clear_room_messages(request: Request, room: str) -> None:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     store.clear_history()
+
+
+@router.post("/rooms/{room}/messages/{message_uuid}/reprocess")
+async def reprocess_message(
+    request: Request, room: str, body: ReprocessRequest | None = None
+) -> dict:
+    # Rewind: borra el mensaje de usuario y todo lo posterior. El frontend
+    # re-envia el texto para que la room vuelva a responder. Si hay mensajes
+    # de usuario debajo y no viene confirm -> 409 (el UI pide confirmacion).
+    try:
+        store = request.app.state.app_state.get_room_store(room)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    confirm = body.confirm if body is not None else False
+    try:
+        text, removed = store.reprocess_truncate(message_uuid, confirm)
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"message {message_uuid} not found in room {room}"
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ReprocessBlocked as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"users_after": exc.users_after},
+        )
+    return {"text": text, "removed": removed}
 
 
 @router.delete("/rooms/{room}/messages/{message_uuid}", status_code=204)

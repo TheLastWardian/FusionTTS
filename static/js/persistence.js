@@ -3,7 +3,12 @@ import { state } from "./state.js";
 import { refreshContextUsage } from "./context.js";
 import { api, toast, avatarCss, initials } from "./utils.js";
 import { ttsReady } from "./tts.js";
-import { appendTokenFooter } from "./chat.js";
+import {
+  makeCopyButton,
+  makeTokensSpan,
+  makeMsgFoot,
+  makeReprocessButton,
+} from "./chat.js";
 
 let playing = null;
 let seqToken = null;
@@ -169,15 +174,46 @@ export async function deleteMessage(messageId, room, el) {
   return true;
 }
 
-function makeDeleteButton(messageId, room, el) {
+export function makeDeleteButton(messageId, room, el, onDeleted) {
   const del = document.createElement("button");
   del.className = "msg-act msg-act-delete";
   del.title = "Eliminar del contexto";
   const di = document.createElement("i");
   di.className = "ti ti-trash";
   del.appendChild(di);
-  del.addEventListener("click", () => deleteMessage(messageId, room, el));
+  del.addEventListener("click", () => {
+    deleteMessage(messageId, room, el).then((ok) => {
+      if (ok && onDeleted) onDeleted();
+    });
+  });
   return del;
+}
+
+// Play all de los wavs guardados del mensaje (fila externa de audio).
+function makeReplayButton(files, room, rootEl) {
+  const replay = document.createElement("button");
+  replay.className = "msg-act msg-act-replay";
+  replay.title = "Play all";
+  replay.setAttribute("aria-label", "Reproducir todo el mensaje en orden (audio guardado)");
+  replay.disabled = true;
+  const ri = document.createElement("i");
+  ri.className = "ti ti-player-play-filled";
+  replay.appendChild(ri);
+  let busy = false;
+  replay.addEventListener("click", () => {
+    if (busy || !files.length) return;
+    busy = true;
+    replay.disabled = true;
+    ri.className = "ti ti-loader spinning";
+    // el play del primer archivo corre de forma sincrona en el click
+    playSavedSequence(room, files, () => {
+      busy = false;
+      replay.disabled = false;
+      ri.className = "ti ti-player-play-filled";
+      applyAudioMode(rootEl);
+    });
+  });
+  return replay;
 }
 
 // Doble click en un mensaje de usuario: edita el texto en el lugar.
@@ -196,7 +232,7 @@ export function beginMessageEdit(msgEl, bubbleEl, messageId, room) {
   taEl.spellcheck = false;
   bubbleEl.replaceChild(taEl, first);
 
-  const actions = msgEl.querySelector(".msg-actions");
+  // los botones de editar se meten en la barra interior (junto al borrar)
   const okBtn = document.createElement("button");
   okBtn.className = "msg-act msg-act-edit-ok";
   okBtn.title = "Guardar";
@@ -209,14 +245,10 @@ export function beginMessageEdit(msgEl, bubbleEl, messageId, room) {
   const xi = document.createElement("i");
   xi.className = "ti ti-x";
   cancelBtn.appendChild(xi);
-  const del = actions ? actions.querySelector(".msg-act-delete") : null;
-  if (actions) {
-    if (del) {
-      actions.insertBefore(okBtn, del);
-      actions.insertBefore(cancelBtn, del);
-    } else {
-      actions.append(okBtn, cancelBtn);
-    }
+  const del = msgEl.querySelector(".msg-act-delete");
+  if (del) {
+    del.parentNode.insertBefore(okBtn, del);
+    del.parentNode.insertBefore(cancelBtn, del);
   }
 
   let busy = false;
@@ -326,7 +358,9 @@ export async function attachSavedAudio(targets, room) {
       actions.className = "msg-actions";
       t.b.bodyEl.appendChild(actions);
     }
-    const replay = actions.querySelector(".msg-act-replay");
+    if (!actions.querySelector(".msg-act-replay")) {
+      actions.appendChild(makeReplayButton(files, room, t.b.rootEl));
+    }
     for (const f of files) {
       const play = document.createElement("button");
       play.className = "msg-act msg-act-audio";
@@ -379,58 +413,32 @@ function renderHistoryMessage(el, m, room) {
     img.alt = "";
     bubble.appendChild(img);
   }
-  appendTokenFooter(bubble, m.tokens);
-  const actions = document.createElement("div");
-  actions.className = "msg-actions";
-  if ((m.audio || []).length) {
-    const replay = document.createElement("button");
-    replay.className = "msg-act msg-act-replay";
-    replay.title = "Play all";
-    replay.setAttribute("aria-label", "Reproducir todo el mensaje en orden (audio guardado)");
-    replay.disabled = true;
-    const ri = document.createElement("i");
-    ri.className = "ti ti-player-play-filled";
-    replay.appendChild(ri);
-    let replayBusy = false;
-    replay.addEventListener("click", () => {
-      if (replayBusy) return;
-      replayBusy = true;
-      ri.className = "ti ti-loader spinning";
-      playSavedSequence(room, m.audio, () => {
-        replayBusy = false;
-        ri.className = "ti ti-player-play-filled";
-        applyAudioMode(msg);
-      });
-    });
-    actions.appendChild(replay);
-  }
-  for (const f of m.audio || []) {
-    const play = document.createElement("button");
-    play.className = "msg-act msg-act-audio";
-    play.title = f;
-    const pi = document.createElement("i");
-    pi.className = "ti ti-music";
-    play.appendChild(pi);
-    play.addEventListener("click", () => playHistoryAudio(play, room, f));
-    actions.appendChild(play);
-  }
-  const copy = document.createElement("button");
-  copy.className = "msg-act msg-act-copy";
-  copy.title = "Copiar";
-  const ci = document.createElement("i");
-  ci.className = "ti ti-copy";
-  copy.appendChild(ci);
-  copy.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(m.text);
-      toast("Copiado", "success");
-    } catch {
-      toast("No se pudo copiar", "error");
+  // barra interior: [copiar][reprocesar si usuario][tokens si respuesta] [borrar]
+  const left = [makeCopyButton(() => m.text)];
+  if (isUser) left.push(makeReprocessButton(msg, bubble, m.uuid, room));
+  const ts = makeTokensSpan(m.tokens);
+  if (ts) left.push(ts);
+  bubble.appendChild(makeMsgFoot(msg, m.uuid, room, left));
+  // la fila externa solo existe si hay audio guardado
+  const audio = m.audio || [];
+  let actions = null;
+  if (audio.length) {
+    actions = document.createElement("div");
+    actions.className = "msg-actions";
+    actions.appendChild(makeReplayButton(audio, room, msg));
+    for (const f of audio) {
+      const play = document.createElement("button");
+      play.className = "msg-act msg-act-audio";
+      play.title = f;
+      const pi = document.createElement("i");
+      pi.className = "ti ti-music";
+      play.appendChild(pi);
+      play.addEventListener("click", () => playHistoryAudio(play, room, f));
+      actions.appendChild(play);
     }
-  });
-  actions.appendChild(copy);
-  actions.appendChild(makeDeleteButton(m.uuid, room, msg));
-  body.append(meta, bubble, actions);
+  }
+  body.append(meta, bubble);
+  if (actions) body.appendChild(actions);
   msg.append(av, body);
   el.appendChild(msg);
   applyAudioMode(msg);

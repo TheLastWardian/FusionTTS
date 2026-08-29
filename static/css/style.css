@@ -164,14 +164,22 @@ body.resizing { user-select: none; -webkit-user-select: none; }
   flex-shrink: 0;
 }
 .tb-icon:hover { background: var(--bg3); color: var(--text-primary); }
-.msg-tokens {
+/* barra interior de la burbuja: [copiar][reprocesar?][tokens?] ... [borrar] */
+.msg-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 8px;
   padding-top: 6px;
-  border-top: 1px dashed var(--accent-border);
+  border-top: 1px dashed var(--border);
+}
+.msg-foot-tokens {
   font-size: 10px;
   color: var(--accent);
   user-select: none;
 }
+.msg-act-reproc { color: var(--accent); }
+.msg-act-reproc:hover { color: var(--accent); background: var(--accent-bg); border-color: var(--accent-border); }
 .tb-icon-sm {
   width: 20px; height: 20px; font-size: 13px;
   border: none; border-radius: 4px;

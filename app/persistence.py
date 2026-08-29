@@ -39,6 +39,14 @@ def new_message(role: str, sender: str, text: str, audio=None, image=None, messa
     }
 
 
+class ReprocessBlocked(Exception):
+    # Hay mensajes de usuario DEBAJO del que se quiere reprocesar: el
+    # rewind los borraria. El endpoint responde 409 y el UI confirma.
+    def __init__(self, users_after: int) -> None:
+        self.users_after = users_after
+        super().__init__(f"{users_after} user message(s) after target")
+
+
 class RoomStore:
     def __init__(self, room_name: str, config: ConfigStore, root: Path | None = None) -> None:
         self.room_name = validate_room_name(room_name)
@@ -148,6 +156,34 @@ class RoomStore:
                         self._write_history()
                     return True
             return False
+
+    def reprocess_truncate(self, msg_uuid: str, confirm: bool = False) -> tuple[str, int]:
+        # Reprocesar = rewind: borra el mensaje de usuario y TODO lo
+        # posterior (in-memory + history.json). El frontend re-envia el texto
+        # para que la room vuelva a responder. Solo confirma si hay mensajes
+        # de usuario debajo (ReprocessBlocked si no hay confirm).
+        with self._lock:
+            idx = None
+            for i, m in enumerate(self.history):
+                if m.get("uuid") == msg_uuid:
+                    idx = i
+                    break
+            if idx is None:
+                raise KeyError(msg_uuid)
+            target = self.history[idx]
+            if target.get("role") != "user":
+                raise ValueError("only user messages can be reprocessed")
+            users_after = sum(
+                1 for x in self.history[idx + 1:] if x.get("role") == "user"
+            )
+            if users_after and not confirm:
+                raise ReprocessBlocked(users_after)
+            text = target.get("text", "")
+            removed = len(self.history) - idx
+            self.history = self.history[:idx]
+            if self.history_path.exists() or self.config.get("save_history"):
+                self._write_history()
+            return text, removed
 
     def clear_history(self) -> None:
         # Borra TODO el contexto de la room (in-memory + history.json si

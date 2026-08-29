@@ -11,11 +11,13 @@ import {
   ttsReady,
 } from "./tts.js";
 import {
-  deleteMessage,
+  makeDeleteButton,
   attachSavedAudio,
   playSavedSequence,
   applyAudioMode,
   beginMessageEdit,
+  stopHistoryAudio,
+  showEmptyState,
 } from "./persistence.js";
 
 let initialized = false;
@@ -70,17 +72,17 @@ function addUserBubble(text, messageId) {
   bubble.textContent = text;
   bubble.title = "Doble click para editar";
   bubble.addEventListener("dblclick", () => beginMessageEdit(msg, bubble, messageId, state.room));
-  const actions = document.createElement("div");
-  actions.className = "msg-actions";
-  const del = document.createElement("button");
-  del.className = "msg-act msg-act-delete";
-  del.title = "Eliminar del contexto";
-  const di = document.createElement("i");
-  di.className = "ti ti-trash";
-  del.appendChild(di);
-  del.addEventListener("click", () => deleteMessage(messageId, state.room, msg));
-  actions.appendChild(del);
-  body.append(meta, bubble, actions);
+  const getText = () => {
+    const first = bubble.firstChild;
+    return first && first.nodeType === Node.TEXT_NODE ? first.nodeValue : text;
+  };
+  bubble.appendChild(
+    makeMsgFoot(msg, messageId, state.room, [
+      makeCopyButton(getText),
+      makeReprocessButton(msg, bubble, messageId, state.room),
+    ]),
+  );
+  body.append(meta, bubble);
   msg.append(av, body);
   messagesEl.appendChild(msg);
   scrollBottom();
@@ -204,15 +206,145 @@ export function tokenFooterTitle(tokens) {
   return bits.join(" · ");
 }
 
-export function appendTokenFooter(bubbleEl, tokens) {
-  if (!tokens) return;
+// Boton de copiar (mismo que el que habia en .msg-actions, ahora en la
+// barra interior de la burbuja).
+export function makeCopyButton(getText) {
+  const copy = document.createElement("button");
+  copy.className = "msg-act msg-act-copy";
+  copy.title = "Copiar";
+  copy.setAttribute("aria-label", "Copiar mensaje");
+  const ci = document.createElement("i");
+  ci.className = "ti ti-copy";
+  copy.appendChild(ci);
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(getText());
+      toast("Copiado", "success");
+    } catch {
+      toast("No se pudo copiar", "error");
+    }
+  });
+  return copy;
+}
+
+// Span con los tokens de la respuesta (usage del stream del LLM).
+export function makeTokensSpan(tokens) {
+  if (!tokens) return null;
   const text = tokenFooterText(tokens);
-  if (!text) return;
-  const ft = document.createElement("div");
-  ft.className = "msg-tokens";
-  ft.textContent = text;
-  ft.title = tokenFooterTitle(tokens);
-  bubbleEl.appendChild(ft);
+  if (!text) return null;
+  const s = document.createElement("span");
+  s.className = "msg-foot-tokens";
+  s.textContent = text;
+  s.title = tokenFooterTitle(tokens);
+  return s;
+}
+
+// Barra interior de la burbuja (el bloque separado): [leftEls…] [borrar]
+// borrar va a la derecha (margin-left:auto de .msg-act-delete).
+export function makeMsgFoot(msgEl, messageId, room, leftEls, onDeleted) {
+  const foot = document.createElement("div");
+  foot.className = "msg-foot";
+  for (const el of leftEls) foot.appendChild(el);
+  foot.appendChild(makeDeleteButton(messageId, room, msgEl, onDeleted));
+  return foot;
+}
+
+// Boton de reprocesar (mensajes de usuario): rewind desde este mensaje —
+// lo borra junto con todo lo posterior y re-envia el texto para que la
+// room vuelva a responder.
+export function makeReprocessButton(msgEl, bubbleEl, messageId, room) {
+  const btn = document.createElement("button");
+  btn.className = "msg-act msg-act-reproc";
+  btn.title = "Reprocesar desde este mensaje (borra esto y todo lo que viene después)";
+  btn.setAttribute("aria-label", "Reprocesar desde este mensaje");
+  const ico = document.createElement("i");
+  ico.className = "ti ti-refresh";
+  btn.appendChild(ico);
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    reprocessFrom(msgEl, bubbleEl, messageId, room);
+  });
+  btn.addEventListener("dblclick", (e) => e.stopPropagation());
+  return btn;
+}
+
+export async function reprocessFrom(msgEl, bubbleEl, messageId, room) {
+  if (state.streaming) {
+    toast("Esperá a que termine la respuesta antes de reprocesar", "warning");
+    return;
+  }
+  if (msgEl.querySelector(".msg-edit-ta")) {
+    toast("Guardá o cancelá la edición antes de reprocesar", "warning");
+    return;
+  }
+  const first = bubbleEl.firstChild;
+  const text =
+    first && first.nodeType === Node.TEXT_NODE ? first.nodeValue.trim() : "";
+  if (!text) {
+    toast("El mensaje no tiene texto para reprocesar", "warning");
+    return;
+  }
+  const url =
+    "/api/rooms/" +
+    encodeURIComponent(room) +
+    "/messages/" +
+    encodeURIComponent(messageId) +
+    "/reprocess";
+  const post = (confirmFlag) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: confirmFlag }),
+    });
+  let res;
+  try {
+    res = await post(false);
+  } catch (err) {
+    toast("No se pudo reprocesar: " + (err && err.message ? err.message : String(err)), "error");
+    return;
+  }
+  if (res.status === 409) {
+    // hay mensajes de usuario debajo: confirmar antes del rewind
+    let n = null;
+    try {
+      const body = await res.json();
+      if (body && body.detail && typeof body.detail === "object") n = body.detail.users_after;
+    } catch {}
+    const info =
+      n != null
+        ? "Hay " + n + " mensaje" + (n === 1 ? "" : "s") + " de usuario debajo; el rewind los borrará."
+        : "Hay mensajes debajo; el rewind los borrará.";
+    if (!confirm(info + "\n¿Reprocesar desde este mensaje?")) return;
+    try {
+      res = await post(true);
+    } catch (err) {
+      toast("No se pudo reprocesar: " + (err && err.message ? err.message : String(err)), "error");
+      return;
+    }
+  }
+  if (!res.ok) {
+    let detail = "HTTP " + res.status;
+    try {
+      const body = await res.json();
+      if (body && body.detail !== undefined) {
+        detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      }
+    } catch {}
+    toast(detail, "error");
+    return;
+  }
+  // rewind OK: limpiar el DOM desde esta burbuja en adelante y re-enviar
+  stopHistoryAudio();
+  let node = msgEl;
+  while (node) {
+    const next = node.nextSibling;
+    node.remove();
+    node = next;
+  }
+  const elMessages = document.getElementById("messages");
+  if (!elMessages.querySelector(".msg")) showEmptyState(elMessages);
+  refreshContextUsage();
+  await doSend(text, crypto.randomUUID());
 }
 
 function finalizeBubble(b, fullText, tokens) {
@@ -225,58 +357,23 @@ function finalizeBubble(b, fullText, tokens) {
   }
   if (b.dots) b.dots.remove();
   b.cursor.remove();
-  appendTokenFooter(b.bubble, tokens);
-  const actions = document.createElement("div");
-  actions.className = "msg-actions";
-  if (b.soundsEl) actions.appendChild(b.soundsEl);
-  const replay = document.createElement("button");
-  replay.className = "msg-act msg-act-replay";
-  replay.title = "Play all";
-  replay.setAttribute("aria-label", "Reproducir todo el mensaje en orden (audio guardado)");
-  replay.disabled = true;
-  const ri = document.createElement("i");
-  ri.className = "ti ti-player-play-filled";
-  replay.appendChild(ri);
-  let replayBusy = false;
-  replay.addEventListener("click", () => {
-    if (replayBusy || !b.savedAudio || !b.savedAudio.length) return;
-    replayBusy = true;
-    replay.disabled = true;
-    ri.className = "ti ti-loader spinning";
-    // el play del primer archivo corre de forma sincrona en el click
-    playSavedSequence(state.room, b.savedAudio, () => {
-      replayBusy = false;
-      ri.className = "ti ti-player-play-filled";
-      applyAudioMode(b.rootEl);
-    });
-  });
-  const copy = document.createElement("button");
-  copy.className = "msg-act msg-act-copy";
-  copy.title = "Copiar";
-  const ci = document.createElement("i");
-  ci.className = "ti ti-copy";
-  copy.appendChild(ci);
-  copy.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(b.textEl.textContent);
-      toast("Copiado", "success");
-    } catch {
-      toast("No se pudo copiar", "error");
-    }
-  });
-  const del = document.createElement("button");
-  del.className = "msg-act msg-act-delete";
-  del.title = "Eliminar del contexto";
-  const di = document.createElement("i");
-  di.className = "ti ti-trash";
-  del.appendChild(di);
-  del.addEventListener("click", () => {
-    if (b.messageId && deleteMessage(b.messageId, state.room, b.rootEl)) {
-      messageBubbles.delete(b.messageId);
-    }
-  });
-  actions.append(replay, copy, del);
-  b.bodyEl.appendChild(actions);
+  // barra interior: [copiar][tokens…] [borrar]
+  const left = [makeCopyButton(() => b.textEl.textContent)];
+  const ts = makeTokensSpan(tokens);
+  if (ts) left.push(ts);
+  b.bubble.appendChild(
+    makeMsgFoot(b.rootEl, b.messageId, state.room, left, () =>
+      messageBubbles.delete(b.messageId),
+    ),
+  );
+  // la fila externa solo existe si hay audio (oraciones TTS live; el
+  // replay + wavs guardados los anade attachSavedAudio al llegar "complete")
+  if (b.soundsEl) {
+    const actions = document.createElement("div");
+    actions.className = "msg-actions";
+    actions.appendChild(b.soundsEl);
+    b.bodyEl.appendChild(actions);
+  }
   applyAudioMode(b.rootEl);
 }
 
@@ -341,10 +438,14 @@ async function send() {
   const text = ta.value.trim();
   if (!text || state.streaming) return;
   const messageId = crypto.randomUUID();
-  addUserBubble(text, messageId);
-  refreshContextUsage();
   ta.value = "";
   resizeTextarea();
+  await doSend(text, messageId);
+}
+
+async function doSend(text, messageId) {
+  addUserBubble(text, messageId);
+  refreshContextUsage();
   state.streaming = true;
   updateSendButton();
   const gen = ++streamGen;

@@ -61,6 +61,10 @@ class MessageTextUpdate(BaseModel):
     text: str = Field(min_length=1)
 
 
+class ReprocessRequest(BaseModel):
+    confirm: bool = False
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     who_answers: str | list[str] = "router"
