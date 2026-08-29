@@ -164,6 +164,11 @@ body.resizing { user-select: none; -webkit-user-select: none; }
   flex-shrink: 0;
 }
 .tb-icon:hover { background: var(--bg3); color: var(--text-primary); }
+.tb-icon-sm {
+  width: 20px; height: 20px; font-size: 13px;
+  border: none; border-radius: 4px;
+}
+.tb-icon-sm:hover { color: var(--danger); background: var(--danger-bg); }
 .tb-icon.active-tab { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent); }
 
 /* ── Gutters (resize + colapso) ── */

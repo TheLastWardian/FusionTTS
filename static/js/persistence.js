@@ -124,7 +124,7 @@ function playHistoryAudio(btn, room, filename) {
     );
 }
 
-function showEmptyState(el) {
+export function showEmptyState(el) {
   const es = document.createElement("div");
   es.className = "empty-state";
   const i = document.createElement("i");

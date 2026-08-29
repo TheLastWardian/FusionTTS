@@ -149,6 +149,15 @@ class RoomStore:
                     return True
             return False
 
+    def clear_history(self) -> None:
+        # Borra TODO el contexto de la room (in-memory + history.json si
+        # existe). Los archivos de media (wavs/imagenes) no se tocan.
+        with self._lock:
+            self.history = []
+            self._pending_audio.clear()
+            if self.history_path.exists():
+                self.history_path.unlink()
+
     def save_image(self, image_bytes: bytes, ext: str = ".png") -> str | None:
         if not self.config.get("save_history"):
             return None

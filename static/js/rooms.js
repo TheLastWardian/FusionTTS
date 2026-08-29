@@ -2,7 +2,7 @@
 import { state } from "./state.js";
 import { api, toast } from "./utils.js";
 import { cancelChat } from "./chat.js";
-import { loadHistory } from "./persistence.js";
+import { loadHistory, stopHistoryAudio, showEmptyState } from "./persistence.js";
 import { refreshContextUsage } from "./context.js";
 import { refreshRoomViews } from "./personas.js";
 
@@ -122,6 +122,42 @@ function updateLabel() {
     state.room === MAIN_ROOM ? MAIN_LABEL : state.room;
 }
 
+// Borrar todo el contexto de la room actual (solo contexto: los wavs/imagenes
+// guardados en disco no se tocan)
+async function clearRoomChat() {
+  if (state.streaming) {
+    toast("Esperá a que termine la respuesta antes de borrar", "warning");
+    return;
+  }
+  const el = document.getElementById("messages");
+  if (!el.querySelector(".msg")) {
+    toast("No hay mensajes para borrar en esta room", "info");
+    return;
+  }
+  const label = state.room === MAIN_ROOM ? MAIN_LABEL : state.room;
+  if (
+    !confirm(
+      "¿Borrar todo el contexto de la room '" + label + "'?\n" +
+        "Se eliminan todos los mensajes del chat. El audio y las imágenes " +
+        "guardados en disco no se tocan.",
+    )
+  ) {
+    return;
+  }
+  try {
+    await api("/api/rooms/" + encodeURIComponent(state.room) + "/messages", {
+      method: "DELETE",
+    });
+    stopHistoryAudio();
+    el.textContent = "";
+    showEmptyState(el);
+    refreshContextUsage();
+    toast("Contexto de la room borrado", "success");
+  } catch (err) {
+    toast(err.message || "Error al borrar el contexto", "error");
+  }
+}
+
 export async function initRooms() {
   const data = await api("/api/rooms");
   state.rooms = data.rooms || [];
@@ -193,6 +229,8 @@ export async function initRooms() {
       toast(err.message || "Error al crear el room", "error");
     }
   };
+
+  document.getElementById("btn-clear-room").addEventListener("click", clearRoomChat);
 
   newBtn.addEventListener("click", () => {
     if (state.personas.length === 0) {

@@ -95,6 +95,15 @@ async def edit_message(
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
+@router.delete("/rooms/{room}/messages", status_code=204)
+async def clear_room_messages(request: Request, room: str) -> None:
+    try:
+        store = request.app.state.app_state.get_room_store(room)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    store.clear_history()
+
+
 @router.delete("/rooms/{room}/messages/{message_uuid}", status_code=204)
 async def delete_message(request: Request, room: str, message_uuid: str) -> None:
     try:
