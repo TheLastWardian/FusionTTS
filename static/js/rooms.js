@@ -9,6 +9,14 @@ import { refreshRoomViews } from "./personas.js";
 const MAIN_ROOM = "default";
 const MAIN_LABEL = "main";
 
+// Cambia la room activa y la persiste (F5 vuelve a esta room)
+function setRoom(name) {
+  state.room = name;
+  try {
+    localStorage.setItem("ft.room", name);
+  } catch {}
+}
+
 function mainRow() {
   const row = document.createElement("div");
   row.className = "room-row";
@@ -80,7 +88,7 @@ function renderRooms() {
 async function switchRoom(name) {
   if (name === state.room) return;
   if (state.streaming) await cancelChat();
-  state.room = name;
+  setRoom(name);
   renderRooms();
   refreshRoomViews();
   updateLabel();
@@ -117,8 +125,15 @@ function updateLabel() {
 export async function initRooms() {
   const data = await api("/api/rooms");
   state.rooms = data.rooms || [];
+  // la room persistida pudo haber sido eliminada del server desde la ultima vez
+  if (state.room !== MAIN_ROOM && !state.rooms.some((r) => r.name === state.room)) {
+    setRoom(MAIN_ROOM);
+  }
   renderRooms();
   updateLabel();
+  // initPersonas corre en paralelo: si renderizo antes que este, la sidebar
+  // quedo filtrada por una lista de rooms vacia; re-renderizo con la real
+  refreshRoomViews();
   refreshContextUsage();
 
   const form = document.getElementById("room-form");
@@ -167,7 +182,7 @@ export async function initRooms() {
         body: { name, persona_names: names, echo_chamber: false },
       });
       state.rooms.push(created);
-      state.room = created.name;
+      setRoom(created.name);
       closeForm();
       renderRooms();
       refreshRoomViews();
@@ -208,7 +223,7 @@ async function deleteRoom(name) {
     await api("/api/rooms/" + encodeURIComponent(name), { method: "DELETE" });
     state.rooms = state.rooms.filter((x) => x.name !== name);
     if (state.room === name) {
-      state.room = MAIN_ROOM;
+      setRoom(MAIN_ROOM);
       renderRooms();
       refreshRoomViews();
       updateLabel();
