@@ -130,7 +130,7 @@ def test_rejects_wrong_type(store, key, value):
         ("max_persona_replies", 0),
         ("max_persona_replies", 6),
         ("max_context_turns", -1),
-        ("max_context_turns", 51),
+        ("max_context_turns", 501),
     ],
 )
 def test_rejects_out_of_range(store, key, value):

@@ -75,7 +75,7 @@ SPECS: dict[str, KeySpec] = {
     "asr_timeout": KeySpec("int", 10, 600),
     "max_persona_replies": KeySpec("int", 1, 5),
     "persona_name_mentions": KeySpec("bool"),
-    "max_context_turns": KeySpec("int", 0, 50),
+    "max_context_turns": KeySpec("int", 0, 500),
     "save_history": KeySpec("bool"),
     "save_audio": KeySpec("bool"),
 }
