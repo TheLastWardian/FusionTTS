@@ -121,6 +121,21 @@ class RoomStore:
             self._pending_audio.setdefault(msg_uuid, []).append(rel_path)
             return False
 
+    def edit_message(self, msg_uuid: str, text: str) -> dict:
+        # Solo mensajes de usuario: el texto queda actualizado en el contexto
+        # (in-memory + history.json) para las proximas rondas del LLM.
+        # KeyError si no existe; ValueError si no es de usuario.
+        with self._lock:
+            for m in self.history:
+                if m.get("uuid") == msg_uuid:
+                    if m.get("role") != "user":
+                        raise ValueError("only user messages can be edited")
+                    m["text"] = text
+                    if self.config.get("save_history"):
+                        self._write_history()
+                    return dict(m)
+            raise KeyError(msg_uuid)
+
     def delete_message(self, msg_uuid: str) -> bool:
         # Borra el mensaje del contexto de la conversacion (in-memory +
         # history.json). Los archivos asociados (wavs/imagenes) se quedan en

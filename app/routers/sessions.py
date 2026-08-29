@@ -3,6 +3,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
+from app.schemas import MessageTextUpdate
+
 router = APIRouter()
 
 FILE_MEDIA_TYPES = {
@@ -23,6 +25,24 @@ async def session_history(request: Request, room: str | None = None) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"room": store.room_name, "messages": list(store.history)}
+
+
+@router.patch("/rooms/{room}/messages/{message_uuid}")
+async def edit_message(
+    request: Request, room: str, message_uuid: str, body: MessageTextUpdate
+) -> dict:
+    try:
+        store = request.app.state.app_state.get_room_store(room)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        return store.edit_message(message_uuid, body.text)
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"message not found: {message_uuid}"
+        ) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
 @router.delete("/rooms/{room}/messages/{message_uuid}", status_code=204)

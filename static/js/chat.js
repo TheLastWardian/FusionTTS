@@ -9,7 +9,13 @@ import {
   setActiveTTSMessage,
   ttsReady,
 } from "./tts.js";
-import { deleteMessage, attachSavedAudio, playSavedSequence, applyAudioMode } from "./persistence.js";
+import {
+  deleteMessage,
+  attachSavedAudio,
+  playSavedSequence,
+  applyAudioMode,
+  beginMessageEdit,
+} from "./persistence.js";
 
 let initialized = false;
 let ta = null;
@@ -61,6 +67,8 @@ function addUserBubble(text, messageId) {
   const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
   bubble.textContent = text;
+  bubble.title = "Doble click para editar";
+  bubble.addEventListener("dblclick", () => beginMessageEdit(msg, bubble, messageId, state.room));
   const actions = document.createElement("div");
   actions.className = "msg-actions";
   const del = document.createElement("button");

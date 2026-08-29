@@ -445,7 +445,14 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
   background: var(--bg2); border: 1px solid var(--border);
   white-space: pre-wrap; word-break: break-word;
 }
-.msg.user .msg-bubble { background: var(--accent-bg); border-color: var(--accent-border); }
+.msg.user .msg-bubble { background: var(--accent-bg); border-color: var(--accent-border); cursor: text; }
+.msg-edit-ta {
+  width: 100%; min-height: 48px; resize: vertical;
+  font-family: var(--font); font-size: 13px; line-height: 1.6;
+  color: var(--text-primary); background: var(--bg1);
+  border: 1px solid var(--accent-border); border-radius: 8px;
+  padding: 6px 8px; outline: none;
+}
 .msg-actions { display: flex; gap: 4px; margin-top: 4px; opacity: 0; transition: opacity .15s; }
 .msg:hover .msg-actions { opacity: 1; }
 .msg-act {
@@ -464,6 +471,10 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
 }
 .msg-act-delete { color: var(--danger); margin-left: auto; }
 .msg-act-delete:hover { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
+.msg-act-edit-ok { color: var(--success); }
+.msg-act-edit-ok:hover { color: var(--success); background: var(--success-bg); border-color: var(--success-border); }
+.msg-act-edit-cancel { color: var(--danger); }
+.msg-act-edit-cancel:hover { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
 .msg-sounds { display: flex; flex-wrap: wrap; gap: 4px; }
 .msg-body > .msg-sounds { margin-top: 4px; }
 .msg-sound-btn {

@@ -177,6 +177,107 @@ function makeDeleteButton(messageId, room, el) {
   return del;
 }
 
+// Doble click en un mensaje de usuario: edita el texto en el lugar.
+// Actualiza el contexto del room (PATCH) sin borrar/reenviar; es la base
+// para el futuro "reprocesar mensaje".
+export function beginMessageEdit(msgEl, bubbleEl, messageId, room) {
+  if (msgEl.querySelector(".msg-edit-ta")) return;
+  const first = bubbleEl.firstChild;
+  if (!first || first.nodeType !== Node.TEXT_NODE) return;
+  const originalText = first.nodeValue;
+
+  const taEl = document.createElement("textarea");
+  taEl.className = "msg-edit-ta";
+  taEl.value = originalText;
+  taEl.title = "Enter = guardar · Esc = cancelar";
+  taEl.spellcheck = false;
+  bubbleEl.replaceChild(taEl, first);
+
+  const actions = msgEl.querySelector(".msg-actions");
+  const okBtn = document.createElement("button");
+  okBtn.className = "msg-act msg-act-edit-ok";
+  okBtn.title = "Guardar";
+  const oki = document.createElement("i");
+  oki.className = "ti ti-check";
+  okBtn.appendChild(oki);
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "msg-act msg-act-edit-cancel";
+  cancelBtn.title = "Cancelar";
+  const xi = document.createElement("i");
+  xi.className = "ti ti-x";
+  cancelBtn.appendChild(xi);
+  const del = actions ? actions.querySelector(".msg-act-delete") : null;
+  if (actions) {
+    if (del) {
+      actions.insertBefore(okBtn, del);
+      actions.insertBefore(cancelBtn, del);
+    } else {
+      actions.append(okBtn, cancelBtn);
+    }
+  }
+
+  let busy = false;
+  let exited = false;
+  const onDocClick = (e) => {
+    // clic fuera del mensaje = cancelar (no mientras hay guardado en vuelo)
+    if (busy || exited) return;
+    if (!msgEl.contains(e.target)) cancel();
+  };
+  const finish = (text) => {
+    if (exited) return;
+    exited = true;
+    document.removeEventListener("click", onDocClick);
+    bubbleEl.replaceChild(document.createTextNode(text), taEl);
+    okBtn.remove();
+    cancelBtn.remove();
+  };
+  const save = async () => {
+    if (busy) return;
+    const text = taEl.value.trim();
+    if (!text) {
+      toast("El mensaje no puede quedar vacío", "warning");
+      return;
+    }
+    if (text === originalText) {
+      finish(text);
+      return;
+    }
+    busy = true;
+    okBtn.disabled = true;
+    cancelBtn.disabled = true;
+    try {
+      await api(
+        "/api/rooms/" + encodeURIComponent(room) + "/messages/" + encodeURIComponent(messageId),
+        { method: "PATCH", body: { text } },
+      );
+      finish(text);
+      toast("Mensaje editado", "success");
+    } catch (err) {
+      toast(err.message || "Error al editar el mensaje", "error");
+      if (!exited) {
+        busy = false;
+        okBtn.disabled = false;
+        cancelBtn.disabled = false;
+      }
+    }
+  };
+  const cancel = () => finish(originalText);
+  document.addEventListener("click", onDocClick);
+  okBtn.addEventListener("click", save);
+  cancelBtn.addEventListener("click", cancel);
+  taEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      save();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancel();
+    }
+  });
+  taEl.focus();
+  taEl.select();
+}
+
 // Regla unica de visibilidad de audio por burbuja:
 // - botones de oracion (TTS live) solo si TTS esta ON y existen
 // - botones de disco solo si NO se puede usar el reproductor TTS
@@ -262,6 +363,11 @@ function renderHistoryMessage(el, m, room) {
   const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
   bubble.textContent = m.text;
+  if (isUser) {
+    // solo los propios se editan (doble click)
+    bubble.title = "Doble click para editar";
+    bubble.addEventListener("dblclick", () => beginMessageEdit(msg, bubble, m.uuid, room));
+  }
   if (m.image) {
     const img = document.createElement("img");
     img.className = "msg-image";

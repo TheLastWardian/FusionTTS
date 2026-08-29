@@ -57,6 +57,10 @@ class SpeakRequest(BaseModel):
     persona: str | None = None
 
 
+class MessageTextUpdate(BaseModel):
+    text: str = Field(min_length=1)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     who_answers: str | list[str] = "router"
