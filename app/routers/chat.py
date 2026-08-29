@@ -391,6 +391,10 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 for ev in _drain_local():
                     yield ev
 
+        # Fin del texto de la ronda: el frontend devuelve el boton a "enviar"
+        # aunque el TTS siga entregando audio (el boton es solo del LLM).
+        yield _sse({"type": "text_done"})
+
         if tts_on:
             # Entrega en vivo: el wait de completion corre en paralelo como
             # task; se entregan los chunks a medida que el pump los produce

@@ -19,6 +19,10 @@ let current = null;
 // burbujas por message_id: el audio de una oracion puede llegar cuando
 // current ya apunta a la siguiente persona (la sintesis va atrasada)
 let messageBubbles = new Map();
+// generacion por stream: al volver el boton a "enviar" con text_done se
+// puede mandar un mensaje nuevo mientras la ronda anterior sigue entregando
+// audio; solo la generacion vigente controla el boton y la limpieza global.
+let streamGen = 0;
 
 function removeEmptyState() {
   const es = messagesEl.querySelector(".empty-state");
@@ -237,35 +241,50 @@ function finishStream() {
   updateSendButton();
 }
 
-function onEvent(ev) {
-  if (ev.type === "start") {
-    current = startPersonaBubble(ev.persona);
-    current.messageId = ev.message_id;
-    messageBubbles.set(ev.message_id, current);
-    setActiveTTSMessage(ev.message_id);
-  } else if (ev.type === "token") {
-    appendToken(current, ev.token);
-  } else if (ev.type === "done") {
-    finalizeBubble(current, ev.text);
-    current = null;
-  } else if (ev.type === "audio_chunk") {
-    feedAudioChunk(ev);
-    const b = messageBubbles.get(ev.message_id);
-    if (b) addSentenceSound(b, ev);
-  } else if (ev.type === "tts_state") {
-    onTTSEvent(ev);
-  } else if (ev.type === "error") {
-    toast(ev.message || "Error en el chat", "error");
-  } else if (ev.type === "complete") {
-    if (ev.cancelled) toast("Chat cancelado", "info");
-    // anade a las burbujas los audios ya guardados en disco (fallback sin TTS)
-    const targets = [];
-    for (const [id, b] of messageBubbles) {
-      if (b.final) targets.push({ id, b });
+function makeOnEvent(gen) {
+  const ids = new Set();
+  return (ev) => {
+    if (ev.type === "start") {
+      current = startPersonaBubble(ev.persona);
+      current.messageId = ev.message_id;
+      messageBubbles.set(ev.message_id, current);
+      ids.add(ev.message_id);
+      setActiveTTSMessage(ev.message_id);
+    } else if (ev.type === "token") {
+      appendToken(current, ev.token);
+    } else if (ev.type === "done") {
+      finalizeBubble(current, ev.text);
+      current = null;
+    } else if (ev.type === "audio_chunk") {
+      feedAudioChunk(ev);
+      const b = messageBubbles.get(ev.message_id);
+      if (b) addSentenceSound(b, ev);
+    } else if (ev.type === "tts_state") {
+      onTTSEvent(ev);
+    } else if (ev.type === "error") {
+      toast(ev.message || "Error en el chat", "error");
+      if (gen === streamGen) finishStream();
+    } else if (ev.type === "text_done") {
+      // el texto de la ronda termino: el boton vuelve a "enviar" aunque el
+      // TTS siga sintetizando/entregando audio (el boton es solo del LLM)
+      if (gen === streamGen) {
+        state.streaming = false;
+        updateSendButton();
+      }
+    } else if (ev.type === "complete") {
+      // anade a las burbujas de ESTE stream los audios guardados en disco
+      // (fallback sin TTS); si ya hay una ronda mas nueva, no se toca el
+      // estado global (su complete hara la limpieza)
+      const targets = [...ids]
+        .map((id) => ({ id, b: messageBubbles.get(id) }))
+        .filter((t) => t.b && t.b.final);
+      if (targets.length) attachSavedAudio(targets, state.room);
+      if (gen === streamGen) {
+        if (ev.cancelled) toast("Chat cancelado", "info");
+        finishStream();
+      }
     }
-    if (targets.length) attachSavedAudio(targets, state.room);
-    finishStream();
-  }
+  };
 }
 
 async function send() {
@@ -277,6 +296,7 @@ async function send() {
   resizeTextarea();
   state.streaming = true;
   updateSendButton();
+  const gen = ++streamGen;
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -297,10 +317,10 @@ async function send() {
         }
       } catch {}
       toast(detail, "error");
-      finishStream();
+      if (gen === streamGen) finishStream();
       return;
     }
-    const parser = new FTTS.SSEParser(onEvent);
+    const parser = new FTTS.SSEParser(makeOnEvent(gen));
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     while (true) {
@@ -308,10 +328,10 @@ async function send() {
       if (done) break;
       parser.feed(decoder.decode(value, { stream: true }));
     }
-    finishStream();
+    if (gen === streamGen) finishStream();
   } catch (err) {
     toast("Error de conexión: " + (err && err.message ? err.message : String(err)), "error");
-    finishStream();
+    if (gen === streamGen) finishStream();
   }
 }
 
