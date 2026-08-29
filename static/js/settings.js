@@ -8,6 +8,13 @@ const FIELDS = [
     items: [
       { key: "llm_base_url", type: "text", label: "Base URL" },
       { key: "llm_model", type: "text", label: "Modelo", placeholder: "vacío = autodetect" },
+      {
+        key: "global_system_prompt",
+        type: "textarea",
+        label: "System prompt global (va antes del prompt de cada persona)",
+        placeholder: "reglas globales, vacío = sin prompt global",
+        rows: 4,
+      },
       { key: "llm_temperature", type: "range", min: 0, max: 2, step: 0.05, kind: "float", label: "Temperature" },
       { key: "llm_top_p", type: "range", min: 0, max: 1, step: 0.01, kind: "float", label: "Top-p" },
       { key: "llm_max_tokens", type: "number", min: 1, max: 100000, label: "Max tokens" },
@@ -188,7 +195,7 @@ function buildField(f) {
     label.textContent = f.label;
     if (f.type === "textarea") {
       input = document.createElement("textarea");
-      input.rows = 2;
+      input.rows = f.rows || 2;
     } else {
       input = document.createElement("input");
       input.type = f.type;

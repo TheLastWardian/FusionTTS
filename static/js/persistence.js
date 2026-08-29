@@ -195,7 +195,7 @@ export function applyAudioMode(msgEl) {
     const canReplay = !ttsReady() && savedBtns.length > 0;
     replay.style.display = canReplay ? "" : "none";
     replay.disabled = !canReplay;
-    replay.title = "Reproducir audio guardado";
+    replay.title = "Play all";
   }
 }
 
@@ -230,8 +230,8 @@ export async function attachSavedAudio(targets, room) {
       pi.className = "ti ti-music";
       play.appendChild(pi);
       play.addEventListener("click", () => playHistoryAudio(play, room, f));
-      if (replay) actions.insertBefore(play, replay);
-      else actions.appendChild(play);
+      // despues del play all (replay) para que el dorado quede primero
+      actions.appendChild(play);
     }
     applyAudioMode(t.b.rootEl);
   }
@@ -271,6 +271,28 @@ function renderHistoryMessage(el, m, room) {
   }
   const actions = document.createElement("div");
   actions.className = "msg-actions";
+  if ((m.audio || []).length) {
+    const replay = document.createElement("button");
+    replay.className = "msg-act msg-act-replay";
+    replay.title = "Play all";
+    replay.setAttribute("aria-label", "Reproducir todo el mensaje en orden (audio guardado)");
+    replay.disabled = true;
+    const ri = document.createElement("i");
+    ri.className = "ti ti-player-play-filled";
+    replay.appendChild(ri);
+    let replayBusy = false;
+    replay.addEventListener("click", () => {
+      if (replayBusy) return;
+      replayBusy = true;
+      ri.className = "ti ti-loader spinning";
+      playSavedSequence(room, m.audio, () => {
+        replayBusy = false;
+        ri.className = "ti ti-player-play-filled";
+        applyAudioMode(msg);
+      });
+    });
+    actions.appendChild(replay);
+  }
   for (const f of m.audio || []) {
     const play = document.createElement("button");
     play.className = "msg-act msg-act-audio";
@@ -280,27 +302,6 @@ function renderHistoryMessage(el, m, room) {
     play.appendChild(pi);
     play.addEventListener("click", () => playHistoryAudio(play, room, f));
     actions.appendChild(play);
-  }
-  if ((m.audio || []).length) {
-    const replay = document.createElement("button");
-    replay.className = "msg-act msg-act-replay";
-    replay.title = "Reproducir audio guardado";
-    replay.disabled = true;
-    const ri = document.createElement("i");
-    ri.className = "ti ti-volume";
-    replay.appendChild(ri);
-    let replayBusy = false;
-    replay.addEventListener("click", () => {
-      if (replayBusy) return;
-      replayBusy = true;
-      ri.className = "ti ti-loader spinning";
-      playSavedSequence(room, m.audio, () => {
-        replayBusy = false;
-        ri.className = "ti ti-volume";
-        applyAudioMode(msg);
-      });
-    });
-    actions.appendChild(replay);
   }
   const copy = document.createElement("button");
   copy.className = "msg-act msg-act-copy";

@@ -142,6 +142,25 @@ export function feedAudioChunk(ev) {
   }
 }
 
+// Play all (boton de mensaje): encola TODAS las oraciones en orden por la
+// misma cola FIFO de decodificacion; no re-sintetiza nada.
+export function playChunksB64(b64List) {
+  if (!b64List || !b64List.length) return;
+  if (!ttsReady()) {
+    toast("TTS no está activo", "error");
+    return;
+  }
+  console.info(`[tts] play all: ${b64List.length} oraciones → cola (en orden)`);
+  ensureCtx();
+  for (const b64 of b64List) {
+    try {
+      decodeAndEnqueue(base64ToBytes(b64).buffer);
+    } catch (err) {
+      console.warn("tts.js: base64 inválido en playChunksB64:", err && err.message ? err.message : err);
+    }
+  }
+}
+
 // Reproduce una oracion desde su base64 ya descargado (botones por oracion):
 // no re-sintetiza, suena al instante por la misma cola de decodificacion.
 export function playChunkB64(b64) {

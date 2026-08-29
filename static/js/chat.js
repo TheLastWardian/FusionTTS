@@ -1,7 +1,14 @@
 // chat.js — flujo de chat: envío POST /api/chat, streaming SSE, burbujas usuario/persona, cancel.
 import { state } from "./state.js";
 import { initials, toast, avatarCss } from "./utils.js";
-import { feedAudioChunk, onTTSEvent, playChunkB64, setActiveTTSMessage, ttsReady } from "./tts.js";
+import {
+  feedAudioChunk,
+  onTTSEvent,
+  playChunkB64,
+  playChunksB64,
+  setActiveTTSMessage,
+  ttsReady,
+} from "./tts.js";
 import { deleteMessage, attachSavedAudio, playSavedSequence, applyAudioMode } from "./persistence.js";
 
 let initialized = false;
@@ -123,6 +130,17 @@ function addSentenceSound(b, ev) {
     const actions = b.bodyEl.querySelector(".msg-actions");
     if (actions) actions.prepend(b.soundsEl);
     else b.bodyEl.appendChild(b.soundsEl);
+    // play all: primer boton de la fila; lee b.sounds en el click, asi
+    // incluye las oraciones que lleguen despues (la sintesis va atrasada)
+    const all = document.createElement("button");
+    all.className = "msg-sound-btn msg-sound-btn-all";
+    all.title = "Play all";
+    all.setAttribute("aria-label", "Reproducir todo el mensaje en orden");
+    const ai = document.createElement("i");
+    ai.className = "ti ti-player-play-filled";
+    all.appendChild(ai);
+    all.addEventListener("click", () => playChunksB64(b.sounds.map((e) => e.audio)));
+    b.soundsEl.appendChild(all);
   }
   const btn = document.createElement("button");
   btn.className = "msg-sound-btn";
@@ -161,10 +179,11 @@ function finalizeBubble(b, fullText) {
   if (b.soundsEl) actions.appendChild(b.soundsEl);
   const replay = document.createElement("button");
   replay.className = "msg-act msg-act-replay";
-  replay.title = "Reproducir audio guardado";
+  replay.title = "Play all";
+  replay.setAttribute("aria-label", "Reproducir todo el mensaje en orden (audio guardado)");
   replay.disabled = true;
   const ri = document.createElement("i");
-  ri.className = "ti ti-volume";
+  ri.className = "ti ti-player-play-filled";
   replay.appendChild(ri);
   let replayBusy = false;
   replay.addEventListener("click", () => {
@@ -175,7 +194,7 @@ function finalizeBubble(b, fullText) {
     // el play del primer archivo corre de forma sincrona en el click
     playSavedSequence(state.room, b.savedAudio, () => {
       replayBusy = false;
-      ri.className = "ti ti-volume";
+      ri.className = "ti ti-player-play-filled";
       applyAudioMode(b.rootEl);
     });
   });

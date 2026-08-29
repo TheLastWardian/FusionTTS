@@ -280,8 +280,13 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 for ev in _drain_local():
                     yield ev
             else:
+                global_prompt = config.get("global_system_prompt").strip()
+                persona_prompt = (persona.get("system_prompt") or "").strip()
+                system_prompt = "\n\n".join(
+                    part for part in (global_prompt, persona_prompt) if part
+                )
                 messages = build_llm_messages(
-                    persona.get("system_prompt", ""),
+                    system_prompt,
                     persona_name,
                     room_store.history,
                     config.get("max_context_turns"),

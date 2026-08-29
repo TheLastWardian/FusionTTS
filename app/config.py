@@ -21,6 +21,7 @@ class KeySpec:
 DEFAULTS: dict = {
     "llm_base_url": "http://localhost:8080",
     "llm_model": "",
+    "global_system_prompt": "",
     "llm_temperature": 1.0,
     "llm_top_p": 1.0,
     "llm_max_tokens": 20600,
@@ -51,6 +52,7 @@ DEFAULTS: dict = {
 SPECS: dict[str, KeySpec] = {
     "llm_base_url": KeySpec("str"),
     "llm_model": KeySpec("str"),
+    "global_system_prompt": KeySpec("str"),
     "llm_temperature": KeySpec("float", 0, 2),
     "llm_top_p": KeySpec("float", 0, 1),
     "llm_max_tokens": KeySpec("int", 1, 100000),
