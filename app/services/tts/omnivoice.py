@@ -9,6 +9,7 @@ import httpx
 
 from app import paths
 from app.config import ConfigStore
+from app.logging_setup import keep_latest, unique_log_path
 from app.services.tts.engine import (
     TTSClientError,
     TTSNotReadyError,
@@ -27,8 +28,6 @@ CLIENT_TIMEOUT = httpx.Timeout(10.0, connect=10.0)
 STATUS_TIMEOUT = httpx.Timeout(2.0, connect=2.0)
 EMPTY_AUDIO_MAX_BYTES = 1000
 SYNTH_MAX_ATTEMPTS = 3
-SERVER_LOG_MAX_BYTES = 5 * 1024 * 1024
-SERVER_LOG_BACKUPS = 9  # server.log + 9 = 10 archivos (los mas nuevos)
 
 
 def _json_detail(resp: httpx.Response) -> str:
@@ -78,29 +77,6 @@ class OmniVoiceEngine:
     def _proc_alive(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
 
-    @staticmethod
-    def _server_log_path() -> Path:
-        log_path = paths.BASE_DIR / "logs" / "tts-server" / "server.log"
-        return log_path
-
-    @staticmethod
-    def _rotate_server_log(log_path: Path) -> None:
-        """Rotacion manual (el server es otro proceso): conserva los ultimos 10."""
-        try:
-            if not log_path.exists() or log_path.stat().st_size < SERVER_LOG_MAX_BYTES:
-                return
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            oldest = log_path.with_name(f"{log_path.name}.{SERVER_LOG_BACKUPS + 1}")
-            if oldest.exists():
-                oldest.unlink()
-            for i in range(SERVER_LOG_BACKUPS, 0, -1):
-                src = log_path.with_name(f"{log_path.name}.{i}")
-                if src.exists():
-                    src.rename(log_path.with_name(f"{log_path.name}.{i + 1}"))
-            log_path.rename(log_path.with_name(f"{log_path.name}.1"))
-        except OSError as exc:
-            logger.warning("rotacion de server.log fallida: %s", exc)
-
     async def spawn(self) -> None:
         async with self._lock:
             if self._closed:
@@ -117,9 +93,11 @@ class OmniVoiceEngine:
             if self._proc_log is not None:
                 self._proc_log.close()
                 self._proc_log = None
-            log_path = self._server_log_path()
-            self._rotate_server_log(log_path)
-            log_path.parent.mkdir(parents=True, exist_ok=True)
+            # sesion propia del TTS server: un archivo por spawn (timestamp
+            # del instante) + cleanup de la carpeta (ultimos 10)
+            server_log_dir = paths.BASE_DIR / "logs" / "tts-server"
+            log_path = unique_log_path(server_log_dir, "server", fresh=True)
+            keep_latest(server_log_dir)
             self._proc_log = open(log_path, "a", encoding="utf-8")
             try:
                 self._proc = subprocess.Popen(
