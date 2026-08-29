@@ -120,6 +120,7 @@ function startPersonaBubble(name) {
   return {
     rootEl: msg,
     bodyEl: body,
+    bubble,
     textEl,
     dots,
     cursor,
@@ -177,7 +178,44 @@ function appendToken(b, token) {
   if (nearBottom()) scrollBottom();
 }
 
-function finalizeBubble(b, fullText) {
+// Pie de tokens dentro de la burbuja (usage del stream del LLM).
+export function tokenFooterText(tokens) {
+  const parts = [];
+  if (typeof tokens.completion === "number") parts.push(tokens.completion + " tok");
+  if (typeof tokens.per_second === "number")
+    parts.push(tokens.per_second.toFixed(1) + " tok/s");
+  return parts.join(" · ");
+}
+
+export function tokenFooterTitle(tokens) {
+  const bits = [];
+  if (typeof tokens.prompt === "number") {
+    bits.push(
+      "prompt " +
+        tokens.prompt +
+        (typeof tokens.cached === "number" ? " (cache " + tokens.cached + ")" : ""),
+    );
+  }
+  if (typeof tokens.completion === "number")
+    bits.push("completion " + tokens.completion);
+  if (typeof tokens.total === "number") bits.push("total " + tokens.total);
+  if (typeof tokens.prompt_ms === "number")
+    bits.push("prompt " + Math.round(tokens.prompt_ms) + "ms");
+  return bits.join(" · ");
+}
+
+export function appendTokenFooter(bubbleEl, tokens) {
+  if (!tokens) return;
+  const text = tokenFooterText(tokens);
+  if (!text) return;
+  const ft = document.createElement("div");
+  ft.className = "msg-tokens";
+  ft.textContent = text;
+  ft.title = tokenFooterTitle(tokens);
+  bubbleEl.appendChild(ft);
+}
+
+function finalizeBubble(b, fullText, tokens) {
   if (!b || b.final) return;
   b.final = true;
   if (typeof fullText === "string") b.textEl.textContent = fullText;
@@ -187,6 +225,7 @@ function finalizeBubble(b, fullText) {
   }
   if (b.dots) b.dots.remove();
   b.cursor.remove();
+  appendTokenFooter(b.bubble, tokens);
   const actions = document.createElement("div");
   actions.className = "msg-actions";
   if (b.soundsEl) actions.appendChild(b.soundsEl);
@@ -262,7 +301,7 @@ function makeOnEvent(gen) {
     } else if (ev.type === "token") {
       appendToken(current, ev.token);
     } else if (ev.type === "done") {
-      finalizeBubble(current, ev.text);
+      finalizeBubble(current, ev.text, ev.tokens);
       current = null;
     } else if (ev.type === "audio_chunk") {
       feedAudioChunk(ev);

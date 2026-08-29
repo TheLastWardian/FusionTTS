@@ -54,6 +54,9 @@ class LLMClient:
         model = self._config.get("llm_model")
         if model:
             body["model"] = model
+        if stream:
+            # llama.cpp devuelve usage en el ultimo chunk del stream
+            body["stream_options"] = {"include_usage": True}
         return body
 
     async def chat(self, messages: list[dict], max_tokens: int | None = None) -> str:
@@ -72,6 +75,7 @@ class LLMClient:
         self,
         messages: list[dict],
         cancel_event: asyncio.Event | None = None,
+        usage_sink: list | None = None,
     ) -> AsyncGenerator[str, None]:
         url = self._base_url() + "/v1/chat/completions"
         try:
@@ -92,6 +96,18 @@ class LLMClient:
                         return
                     try:
                         chunk = json.loads(payload)
+                    except ValueError as exc:
+                        raise LLMError(f"bad SSE payload: {payload[:200]}") from exc
+                    # chunk final de usage: choices=[] + usage (+timings de
+                    # llama.cpp). Si no se capta aqui, el acceso a
+                    # choices[0] abajo lo levanta como LLMError.
+                    if "usage" in chunk:
+                        if usage_sink is not None:
+                            usage_sink.append(
+                                {"usage": chunk["usage"], "timings": chunk.get("timings")}
+                            )
+                        continue
+                    try:
                         content = chunk["choices"][0]["delta"].get("content")
                     except (ValueError, KeyError, IndexError, TypeError) as exc:
                         raise LLMError(f"bad SSE payload: {payload[:200]}") from exc

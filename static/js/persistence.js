@@ -3,6 +3,7 @@ import { state } from "./state.js";
 import { refreshContextUsage } from "./context.js";
 import { api, toast, avatarCss, initials } from "./utils.js";
 import { ttsReady } from "./tts.js";
+import { appendTokenFooter } from "./chat.js";
 
 let playing = null;
 let seqToken = null;
@@ -378,6 +379,7 @@ function renderHistoryMessage(el, m, room) {
     img.alt = "";
     bubble.appendChild(img);
   }
+  appendTokenFooter(bubble, m.tokens);
   const actions = document.createElement("div");
   actions.className = "msg-actions";
   if ((m.audio || []).length) {

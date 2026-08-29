@@ -72,6 +72,23 @@ def _drain_sentences(buf: str) -> tuple[list[str], str]:
     return ready, buf[last_end:]
 
 
+def _tokens_summary(usage_sink: list) -> dict | None:
+    # Apelmaza usage/timings del chunk final del stream para el historial y
+    # el pie de la burbuja. None si el server no envio usage.
+    if not usage_sink:
+        return None
+    u = usage_sink[0].get("usage") or {}
+    t = usage_sink[0].get("timings") or {}
+    return {
+        "prompt": u.get("prompt_tokens"),
+        "completion": u.get("completion_tokens"),
+        "total": u.get("total_tokens"),
+        "cached": (u.get("prompt_tokens_details") or {}).get("cached_tokens"),
+        "per_second": t.get("predicted_per_second"),
+        "prompt_ms": t.get("prompt_ms"),
+    }
+
+
 def _audio_event(chunk) -> dict:
     return {
         "type": "audio_chunk",
@@ -293,6 +310,7 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                             message["content"] += f"\n\n[Attached image description: {description}]"
                             break
                 full_text = ""
+                usage_sink: list = []
                 pending_token = None
                 tick = None
                 try:
@@ -301,7 +319,9 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                     # time-to-first-token) retenia el audio ya sintetizado: el
                     # TTS sintetiza en paralelo, pero la entrega a SSE quedaba
                     # acoplada al flujo de tokens del LLM.
-                    ait = state.llm.stream_chat(messages, state.cancel_event).__aiter__()
+                    ait = state.llm.stream_chat(
+                        messages, state.cancel_event, usage_sink
+                    ).__aiter__()
                     pending_token = asyncio.ensure_future(ait.__anext__())
                     while True:
                         tick = asyncio.ensure_future(asyncio.sleep(1.0))
@@ -348,30 +368,34 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 if state.cancel_event.is_set():
                     if tts_on:
                         await state.dispatcher.stop()
-                    room_store.append(
-                        new_message(
-                            "assistant", persona_name, full_text, message_uuid=assistant_message_id
-                        )
+                    cancelled_msg = new_message(
+                        "assistant", persona_name, full_text, message_uuid=assistant_message_id
                     )
+                    cancelled_msg["tokens"] = _tokens_summary(usage_sink)
+                    room_store.append(cancelled_msg)
                     yield _sse(
                         {
                             "type": "done",
                             "persona": persona_name,
                             "text": full_text,
                             "message_id": assistant_message_id,
+                            "tokens": cancelled_msg["tokens"],
                         }
                     )
                     break
 
-            room_store.append(
-                new_message("assistant", persona_name, full_text, message_uuid=assistant_message_id)
+            assistant_msg = new_message(
+                "assistant", persona_name, full_text, message_uuid=assistant_message_id
             )
+            assistant_msg["tokens"] = _tokens_summary(usage_sink)
+            room_store.append(assistant_msg)
             yield _sse(
                 {
                     "type": "done",
                     "persona": persona_name,
                     "text": full_text,
                     "message_id": assistant_message_id,
+                    "tokens": assistant_msg["tokens"],
                 }
             )
             if tts_on:
