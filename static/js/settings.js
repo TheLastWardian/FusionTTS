@@ -50,6 +50,12 @@ const FIELDS = [
       { key: "asr_timeout", type: "range", min: 10, max: 600, step: 5, kind: "int", label: "Timeout", suffix: " s" },
     ],
   },
+  {
+    group: "VRAM",
+    items: [
+      { key: "tts_int8", type: "toggle", label: "INT8 (menos VRAM, misma calidad)" },
+    ],
+  },
 ];
 
 const controls = {};

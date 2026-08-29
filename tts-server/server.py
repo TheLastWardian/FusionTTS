@@ -105,7 +105,11 @@ def _load_model_impl():
 
     kwargs = {"device_map": DEVICE, "torch_dtype": _TORCH.bfloat16}
     if INT8:
-        kwargs["load_in_8bit"] = True
+        # transformers >=4.50/5.x: load_in_8bit ya no es kwarg de from_pretrained;
+        # se pasa via quantization_config (bitsandbytes).
+        from transformers import BitsAndBytesConfig
+
+        kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
     m = OmniVoice.from_pretrained(MODEL_NAME, **kwargs)
     logger.info("OmniVoice %s cargado correctamente.", mode)
     _model = m

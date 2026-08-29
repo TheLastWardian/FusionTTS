@@ -233,16 +233,19 @@ def test_load_non_list_json_empty(config, tmp_path):
     assert store.load() == []
 
 
-def test_load_flag_off_keeps_empty(config, tmp_path):
+def test_load_flag_off_still_loads_existing(config, tmp_path):
+    # save_history solo controla guardado, no carga: si el archivo existe se
+    # carga igual.
     root = tmp_path / "chatrooms"
     room_dir = root / "old"
     room_dir.mkdir(parents=True)
+    expected = new_message("user", "user", "antes")
     (room_dir / "history.json").write_text(
-        json.dumps([new_message("user", "user", "antes")]), encoding="utf-8"
+        json.dumps([expected]), encoding="utf-8"
     )
     config.set("save_history", False)
     store = RoomStore("old", config, root=root)
-    assert store.load() == []
+    assert store.load() == [expected]
 
 
 def test_concurrent_appends(store, config):

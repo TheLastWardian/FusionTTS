@@ -64,10 +64,11 @@ class RoomStore:
         self._atomic_write_bytes(self.history_path, payload.encode("utf-8"))
 
     def load(self) -> list[dict]:
+        # Si existe history.json se carga siempre, independientemente de
+        # save_history: ese setting solo controla SI SE GUARDA, no si se
+        # carga lo ya existente.
         with self._lock:
             self.history = []
-            if not self.config.get("save_history"):
-                return self.history
             if not self.history_path.exists():
                 return self.history
             try:

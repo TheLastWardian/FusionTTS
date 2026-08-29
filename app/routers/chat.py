@@ -292,30 +292,58 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                             message["content"] += f"\n\n[Attached image description: {description}]"
                             break
                 full_text = ""
+                pending_token = None
+                tick = None
                 try:
-                    async for token in state.llm.stream_chat(messages, state.cancel_event):
-                        full_text += token
-                        yield _sse(
-                            {"type": "token", "persona": persona_name, "token": token}
+                    # Iteracion manual con tick de 1s: local_q se drena por token
+                    # Y por tick. Sin el tick, un tramo sin tokens (fase thinking,
+                    # time-to-first-token) retenia el audio ya sintetizado: el
+                    # TTS sintetiza en paralelo, pero la entrega a SSE quedaba
+                    # acoplada al flujo de tokens del LLM.
+                    ait = state.llm.stream_chat(messages, state.cancel_event).__aiter__()
+                    pending_token = asyncio.ensure_future(ait.__anext__())
+                    while True:
+                        tick = asyncio.ensure_future(asyncio.sleep(1.0))
+                        done, _ = await asyncio.wait(
+                            {pending_token, tick}, return_when=asyncio.FIRST_COMPLETED
                         )
-                        # "full": se encola el texto completo al terminar (abajo)
-                        if tts_on and tts_mode != "full":
-                            buf += token
-                            ready, buf = _drain_sentences(buf)
-                            for sentence in ready:
-                                await state.dispatcher.enqueue(
-                                    sentence, assistant_message_id, persona_name
+                        if pending_token in done:
+                            try:
+                                token = pending_token.result()
+                            except StopAsyncIteration:
+                                pending_token = None
+                            else:
+                                full_text += token
+                                yield _sse(
+                                    {"type": "token", "persona": persona_name, "token": token}
                                 )
+                                # "full": se encola el texto completo al terminar (abajo)
+                                if tts_on and tts_mode != "full":
+                                    buf += token
+                                    ready, buf = _drain_sentences(buf)
+                                    for sentence in ready:
+                                        await state.dispatcher.enqueue(
+                                            sentence, assistant_message_id, persona_name
+                                        )
+                                pending_token = asyncio.ensure_future(ait.__anext__())
+                        if tick not in done:
+                            tick.cancel()
                         # audio en vivo: el pump ya movió chunks a local_q;
                         # el texto nunca espera por el TTS
                         for ev in _drain_local():
                             yield ev
+                        if pending_token is None:
+                            break
                 except LLMError as exc:
                     if tts_on:
                         await state.dispatcher.stop()
                     yield _sse({"type": "error", "message": str(exc)})
                     yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
                     return
+                finally:
+                    for f in (pending_token, tick):
+                        if f is not None and not f.done():
+                            f.cancel()
                 if state.cancel_event.is_set():
                     if tts_on:
                         await state.dispatcher.stop()
