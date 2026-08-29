@@ -1,5 +1,6 @@
 // persistence.js — historial: carga al cambiar/crear room y al arrancar, mensajes pasados y playback de wavs guardados.
 import { state } from "./state.js";
+import { refreshContextUsage } from "./context.js";
 import { api, toast, avatarCss, initials } from "./utils.js";
 import { ttsReady } from "./tts.js";
 
@@ -163,6 +164,7 @@ export async function deleteMessage(messageId, room, el) {
   const elMessages = document.getElementById("messages");
   if (!elMessages.querySelector(".msg")) showEmptyState(elMessages);
   toast("Mensaje eliminado", "success");
+  refreshContextUsage();
   return true;
 }
 
@@ -252,6 +254,7 @@ export function beginMessageEdit(msgEl, bubbleEl, messageId, room) {
       );
       finish(text);
       toast("Mensaje editado", "success");
+      refreshContextUsage();
     } catch (err) {
       toast(err.message || "Error al editar el mensaje", "error");
       if (!exited) {

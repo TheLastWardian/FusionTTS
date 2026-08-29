@@ -38,7 +38,7 @@ const FIELDS = [
     group: "General",
     items: [
       { key: "max_persona_replies", type: "range", min: 1, max: 5, step: 1, kind: "int", label: "Max replies" },
-      { key: "max_context_turns", type: "range", min: 0, max: 50, step: 1, kind: "int", label: "Context turns" },
+      { key: "max_context_turns", type: "range", min: 0, max: 500, step: 1, kind: "int", label: "Context turns" },
       { key: "persona_name_mentions", type: "toggle", label: "Menciones por nombre" },
     ],
   },

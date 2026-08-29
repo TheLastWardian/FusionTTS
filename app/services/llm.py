@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from collections.abc import AsyncGenerator
 
 import httpx
@@ -34,6 +35,8 @@ class LLMClient:
             if http_client is not None
             else httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0, write=30.0))
         )
+        self._ctx_cache: int | None = None
+        self._ctx_at = 0.0
 
     def _base_url(self) -> str:
         return str(self._config.get("llm_base_url")).rstrip("/")
@@ -94,6 +97,68 @@ class LLMClient:
                         raise LLMError(f"bad SSE payload: {payload[:200]}") from exc
                     if content:
                         yield content
+        except LLMError:
+            raise
+        except Exception as exc:
+            raise LLMError(_error_detail(exc, url)) from exc
+
+    async def get_context_window(self) -> int | None:
+        # Ventana real del server: llama.cpp expone n_ctx en /props.
+        # Cacheada 5 min (la room la usa para el indicador de contexto).
+        now = time.monotonic()
+        if self._ctx_cache is not None and now - self._ctx_at < 300:
+            return self._ctx_cache
+        url = self._base_url() + "/props"
+        try:
+            # timeout corto: la sonda no debe colgarse tras una generacion
+            # larga del server (slot unico)
+            resp = await self._client.get(url, timeout=httpx.Timeout(15.0, connect=10.0))
+            resp.raise_for_status()
+            data = resp.json()
+            window = self._parse_context_window(data)
+            if window is None:
+                raise ValueError("n_ctx not found in /props response")
+            self._ctx_cache = window
+            self._ctx_at = now
+            return window
+        except Exception as exc:
+            self._ctx_cache = None
+            self._ctx_at = 0.0
+            raise LLMError(_error_detail(exc, url)) from exc
+
+    @staticmethod
+    def _parse_context_window(data: dict) -> int | None:
+        # La ubicacion de n_ctx varia entre builds de llama.cpp
+        dgs = data.get("default_generation_settings") or {}
+        for candidate in (
+            dgs.get("n_ctx"),
+            (dgs.get("params") or {}).get("n_ctx"),
+            data.get("n_ctx"),
+        ):
+            if isinstance(candidate, int) and candidate > 0:
+                return candidate
+        return None
+
+    async def count_tokens(self, messages: list[dict]) -> int:
+        # Sonda: el server tokeniza el prompt y devuelve usage sin generar
+        # (max_tokens=0; llama.cpp aun produce ~1 token, coste despreciable).
+        url = self._base_url() + "/v1/chat/completions"
+        body: dict = {
+            "messages": messages,
+            "stream": False,
+            "temperature": 0.0,
+            "top_p": 1.0,
+            "max_tokens": 0,
+        }
+        model = self._config.get("llm_model")
+        if model:
+            body["model"] = model
+        try:
+            resp = await self._client.post(
+                url, json=body, timeout=httpx.Timeout(30.0, connect=10.0)
+            )
+            resp.raise_for_status()
+            return int(resp.json()["usage"]["prompt_tokens"])
         except LLMError:
             raise
         except Exception as exc:

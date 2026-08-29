@@ -1,3 +1,10 @@
+def build_system_prompt(config, persona: dict) -> str:
+    """Prompt de sistema que se envia para una persona: global + su prompt."""
+    global_prompt = str(config.get("global_system_prompt") or "").strip()
+    persona_prompt = (persona.get("system_prompt") or "").strip()
+    return "\n\n".join(part for part in (global_prompt, persona_prompt) if part)
+
+
 def build_llm_messages(
     system_prompt: str,
     responding_persona: str,

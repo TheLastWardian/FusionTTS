@@ -1,5 +1,6 @@
 // chat.js — flujo de chat: envío POST /api/chat, streaming SSE, burbujas usuario/persona, cancel.
 import { state } from "./state.js";
+import { refreshContextUsage } from "./context.js";
 import { initials, toast, avatarCss } from "./utils.js";
 import {
   feedAudioChunk,
@@ -291,6 +292,8 @@ function makeOnEvent(gen) {
         if (ev.cancelled) toast("Chat cancelado", "info");
         finishStream();
       }
+      // la ronda quedo en el historial del server: contexto actualizado
+      refreshContextUsage();
     }
   };
 }
@@ -300,6 +303,7 @@ async function send() {
   if (!text || state.streaming) return;
   const messageId = crypto.randomUUID();
   addUserBubble(text, messageId);
+  refreshContextUsage();
   ta.value = "";
   resizeTextarea();
   state.streaming = true;

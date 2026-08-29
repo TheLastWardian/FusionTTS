@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from app.persistence import new_message, validate_room_name
 from app.schemas import ChatRequest
 from app.services import vision
-from app.services.chat_context import build_llm_messages
+from app.services.chat_context import build_llm_messages, build_system_prompt
 from app.services.llm import LLMError
 from app.services.persona_router import pick_persona, resolve_room_personas
 from app.services.tts.splitter import FULL_CHUNK_LEN, chunk_text_punctuation
@@ -280,11 +280,7 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 for ev in _drain_local():
                     yield ev
             else:
-                global_prompt = config.get("global_system_prompt").strip()
-                persona_prompt = (persona.get("system_prompt") or "").strip()
-                system_prompt = "\n\n".join(
-                    part for part in (global_prompt, persona_prompt) if part
-                )
+                system_prompt = build_system_prompt(config, persona)
                 messages = build_llm_messages(
                     system_prompt,
                     persona_name,

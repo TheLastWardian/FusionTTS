@@ -3,6 +3,7 @@ import { state } from "./state.js";
 import { api, toast } from "./utils.js";
 import { cancelChat } from "./chat.js";
 import { loadHistory } from "./persistence.js";
+import { refreshContextUsage } from "./context.js";
 import { refreshRoomViews } from "./personas.js";
 
 const MAIN_ROOM = "default";
@@ -85,6 +86,7 @@ async function switchRoom(name) {
   updateLabel();
   toast("Room: " + (name === MAIN_ROOM ? MAIN_LABEL : name), "info");
   await loadHistory(name);
+  refreshContextUsage();
 }
 
 async function toggleEcho(name) {
@@ -117,6 +119,7 @@ export async function initRooms() {
   state.rooms = data.rooms || [];
   renderRooms();
   updateLabel();
+  refreshContextUsage();
 
   const form = document.getElementById("room-form");
   const input = document.getElementById("room-name");
@@ -322,7 +325,10 @@ async function saveRoomPersonas(name, checks) {
     Object.assign(r, updated);
     closeRoomModal();
     renderRooms();
-    if (state.room === r.name) refreshRoomViews();
+    if (state.room === r.name) {
+      refreshRoomViews();
+      refreshContextUsage();
+    }
     toast("Personajes actualizados: " + r.name, "success");
   } catch (err) {
     toast(err.message || "Error al guardar los personajes", "error");
