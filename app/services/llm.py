@@ -1,7 +1,10 @@
 import asyncio
 import json
+import logging
 import time
 from collections.abc import AsyncGenerator
+
+logger = logging.getLogger(__name__)
 
 import httpx
 
@@ -67,7 +70,19 @@ class LLMClient:
             resp = await self._client.post(url, json=self._build_body(messages, stream=False, max_tokens=max_tokens, temperature=temperature))
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            choice = data["choices"][0]
+            message = choice["message"]
+            content = message.get("content") or ""
+            if not content:
+                logger.warning(
+                    "LLM devolvió content vacío (keys=%s, reasoning_content=%d chars, finish_reason=%s); "
+                    "probable que el thinking se haya comido max_tokens=%s",
+                    list(message.keys()),
+                    len(message.get("reasoning_content") or ""),
+                    choice.get("finish_reason"),
+                    max_tokens if max_tokens is not None else self._config.get("llm_max_tokens"),
+                )
+            return content
         except LLMError:
             raise
         except Exception as exc:
