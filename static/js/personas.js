@@ -514,7 +514,7 @@ async function openPersonaModal(name) {
   fileInput.accept = ".png,.jpg,.jpeg,.webp,.gif,image/*";
   fileInput.hidden = true;
   const upBtn = document.createElement("button");
-  upBtn.className = "pm-btn";
+  upBtn.className = "pm-btn primary";
   upBtn.textContent = "Subir foto";
   const rmBtn = document.createElement("button");
   rmBtn.className = "pm-btn danger";

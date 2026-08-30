@@ -17,6 +17,7 @@ logs/
 personas.yaml
 chatrooms.yaml
 personas_audio/
+personas_avatars/
 
 # Temporales
 *.tmp
