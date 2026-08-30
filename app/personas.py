@@ -27,10 +27,12 @@ class PersonaStore:
         self,
         personas_yaml: Path | None = None,
         audio_dir: Path | None = None,
+        avatar_dir: Path | None = None,
         rooms: RoomConfigStore | None = None,
     ) -> None:
         self.yaml_path = Path(personas_yaml) if personas_yaml is not None else paths.PERSONAS_YAML
         self.audio_dir = Path(audio_dir) if audio_dir is not None else paths.PERSONAS_AUDIO_DIR
+        self.avatar_dir = Path(avatar_dir) if avatar_dir is not None else paths.PERSONAS_AVATARS_DIR
         self.rooms: RoomConfigStore | None = rooms
         self._personas: list[dict] = []
         self._lock = threading.Lock()
@@ -108,6 +110,15 @@ class PersonaStore:
             self._persist_locked()
             return dict(validated)
 
+    def set_avatar(self, name: str, rel: str | None) -> dict:
+        with self._lock:
+            for i, p in enumerate(self._personas):
+                if p.get("name") == name:
+                    self._personas[i]["avatar_image"] = rel
+                    self._persist_locked()
+                    return dict(p)
+            raise KeyError(name)
+
     def rename(self, old_name: str, new_name: str) -> dict:
         with self._lock:
             index = next(
@@ -123,7 +134,8 @@ class PersonaStore:
             validated = self._validate(candidate)
             self._personas[index] = validated
             self._persist_locked()
-            return dict(validated)
+        self._rename_avatar_file(old_name, new_name)
+        return dict(validated)
 
     def delete(self, name: str) -> None:
         with self._lock:
@@ -138,6 +150,7 @@ class PersonaStore:
         if self.rooms is not None:
             self.rooms.remove_persona(name)
         self._delete_audio_files(persona)
+        self._delete_avatar_file(persona)
 
     def _delete_audio_files(self, persona: dict) -> None:
         for key in ("reference_audio", "reference_audio_transcript"):
@@ -163,6 +176,53 @@ class PersonaStore:
         except (OSError, ValueError):
             return None
         return candidate if candidate.is_file() else None
+
+    def _safe_avatar_path(self, rel: str) -> Path | None:
+        rel_path = Path(rel)
+        if rel_path.is_absolute() or ".." in rel_path.parts:
+            return None
+        candidate = self.avatar_dir.parent / rel_path
+        try:
+            candidate.resolve().relative_to(self.avatar_dir.resolve())
+        except (OSError, ValueError):
+            return None
+        return candidate if candidate.is_file() else None
+
+    def _delete_avatar_file(self, persona: dict) -> None:
+        rel = persona.get("avatar_image")
+        if not rel:
+            return
+        target = self._safe_avatar_path(str(rel))
+        if target is not None:
+            try:
+                target.unlink()
+            except OSError as exc:
+                logger.warning(
+                    "persona %s: could not remove avatar %s: %s",
+                    persona.get("name"), target, exc,
+                )
+
+    def _rename_avatar_file(self, old_name: str, new_name: str) -> None:
+        persona = self.get(new_name)
+        rel = persona.get("avatar_image") if persona else None
+        if not rel:
+            return
+        src = self._safe_avatar_path(str(rel))
+        if src is None:
+            return
+        dst = self.avatar_dir / f"{new_name}{src.suffix}"
+        try:
+            src.replace(dst)
+        except OSError as exc:
+            logger.warning(
+                "persona %s -> %s: could not rename avatar %s: %s", old_name, new_name, src, exc
+            )
+            return
+        with self._lock:
+            for p in self._personas:
+                if p.get("name") == new_name:
+                    p["avatar_image"] = f"{self.avatar_dir.name}/{dst.name}"
+            self._persist_locked()
 
     @staticmethod
     def _validate(persona: dict) -> dict:

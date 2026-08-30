@@ -73,3 +73,31 @@ export function initials(name) {
     .join("")
     .toUpperCase();
 }
+
+export function avatarUrl(name) {
+  return "/api/personas/" + encodeURIComponent(name) + "/avatar";
+}
+
+// avatar de persona: foto si tiene avatar_image (con fallback a iniciales si
+// la carga falla), si no, circulo de color con iniciales
+export function avatarEl(p, cls) {
+  const el = document.createElement("div");
+  el.className = cls;
+  const persona = p || {};
+  const name = persona.name || "";
+  const fillInitials = () => {
+    el.textContent = "";
+    el.style.cssText = avatarCss(persona);
+    el.textContent = initials(name);
+  };
+  if (persona.avatar_image) {
+    const img = document.createElement("img");
+    img.alt = name;
+    img.src = avatarUrl(name);
+    img.addEventListener("error", fillInitials);
+    el.appendChild(img);
+  } else {
+    fillInitials();
+  }
+  return el;
+}

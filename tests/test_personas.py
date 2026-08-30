@@ -13,6 +13,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "CHATROOMS_YAML", tmp_path / "chatrooms.yaml")
     monkeypatch.setattr(paths, "PERSONAS_YAML", tmp_path / "personas.yaml")
     monkeypatch.setattr(paths, "PERSONAS_AUDIO_DIR", tmp_path / "personas_audio")
+    monkeypatch.setattr(paths, "PERSONAS_AVATARS_DIR", tmp_path / "personas_avatars")
     with TestClient(app) as c:
         yield c
 
@@ -245,3 +246,116 @@ def test_persona_audio_missing_404(client):
 def test_persona_audio_invalid_400(client, bad):
     r = client.get(f"/api/persona-audio/{bad}")
     assert r.status_code == 400
+
+
+# --- avatares ---
+
+
+def test_avatar_upload_serve_and_delete(client, tmp_path):
+    client.post("/api/personas", json=make_persona())
+    avatars = tmp_path / "personas_avatars"
+    data = b"\x89PNG fake bytes"
+
+    r = client.put(
+        "/api/personas/Jean/avatar",
+        files={"file": ("Jean.png", data, "image/png")},
+    )
+    assert r.status_code == 200
+    assert r.json()["avatar_image"] == "personas_avatars/Jean.png"
+    assert (avatars / "Jean.png").read_bytes() == data
+
+    r = client.get("/api/personas/Jean/avatar")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/png"
+    assert r.content == data
+    assert (
+        client.get("/api/personas/Jean").json()["avatar_image"]
+        == "personas_avatars/Jean.png"
+    )
+
+    r = client.delete("/api/personas/Jean/avatar")
+    assert r.status_code == 200
+    assert r.json()["avatar_image"] is None
+    assert not (avatars / "Jean.png").exists()
+    assert client.get("/api/personas/Jean/avatar").status_code == 404
+    assert client.delete("/api/personas/Jean/avatar").status_code == 400
+
+
+def test_avatar_upload_wrong_ext_400(client):
+    client.post("/api/personas", json=make_persona())
+    r = client.put(
+        "/api/personas/Jean/avatar",
+        files={"file": ("Jean.exe", b"x", "application/octet-stream")},
+    )
+    assert r.status_code == 400
+
+
+def test_avatar_upload_too_big_400(client):
+    client.post("/api/personas", json=make_persona())
+    r = client.put(
+        "/api/personas/Jean/avatar",
+        files={"file": ("Jean.png", b"\x00" * (15 * 1024 * 1024 + 1), "image/png")},
+    )
+    assert r.status_code == 400
+    assert "15MB" in r.json()["detail"]
+
+
+def test_avatar_upload_missing_persona_404(client):
+    r = client.put(
+        "/api/personas/Nadie/avatar", files={"file": ("x.png", b"x", "image/png")}
+    )
+    assert r.status_code == 404
+    assert client.get("/api/personas/Nadie/avatar").status_code == 404
+
+
+def test_avatar_upload_replaces_old_file(client, tmp_path):
+    client.post("/api/personas", json=make_persona())
+    avatars = tmp_path / "personas_avatars"
+    client.put(
+        "/api/personas/Jean/avatar", files={"file": ("Jean.png", b"png-bytes", "image/png")}
+    )
+    client.put(
+        "/api/personas/Jean/avatar", files={"file": ("Jean.jpg", b"jpg-bytes", "image/jpeg")}
+    )
+    assert not (avatars / "Jean.png").exists()
+    assert (avatars / "Jean.jpg").read_bytes() == b"jpg-bytes"
+    assert client.get("/api/personas/Jean").json()["avatar_image"] == "personas_avatars/Jean.jpg"
+
+
+def test_delete_persona_removes_avatar(client, tmp_path):
+    client.post("/api/personas", json=make_persona())
+    avatars = tmp_path / "personas_avatars"
+    client.put(
+        "/api/personas/Jean/avatar", files={"file": ("Jean.png", b"x", "image/png")}
+    )
+    assert client.delete("/api/personas/Jean").status_code == 200
+    assert not (avatars / "Jean.png").exists()
+
+
+def test_delete_persona_avatar_no_escape(client, tmp_path):
+    avatars = tmp_path / "personas_avatars"
+    avatars.mkdir()
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"data")
+    store = PersonaStore(
+        personas_yaml=tmp_path / "personas.yaml",
+        audio_dir=tmp_path / "personas_audio",
+        avatar_dir=avatars,
+    )
+    store.create(make_persona("Jean", avatar_image="personas_avatars/../outside.png"))
+    store.delete("Jean")
+    assert outside.exists()
+
+
+def test_rename_persona_renames_avatar(client, tmp_path):
+    client.post("/api/personas", json=make_persona())
+    avatars = tmp_path / "personas_avatars"
+    client.put(
+        "/api/personas/Jean/avatar", files={"file": ("Jean.png", b"x", "image/png")}
+    )
+    r = client.post("/api/personas/Jean/rename", json={"name": "Jeanette"})
+    assert r.status_code == 200
+    assert r.json()["avatar_image"] == "personas_avatars/Jeanette.png"
+    assert not (avatars / "Jean.png").exists()
+    assert (avatars / "Jeanette.png").read_bytes() == b"x"
+    assert client.get("/api/personas/Jeanette/avatar").status_code == 200

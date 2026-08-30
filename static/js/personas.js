@@ -1,6 +1,6 @@
 // personas.js — sidebar de personas, who-chips, upload de .wav en 2 fases (draft → aceptar/rechazar) y editor de persona.
 import { state } from "./state.js";
-import { api, avatarCss, initials, toast } from "./utils.js";
+import { api, avatarCss, initials, avatarEl, toast } from "./utils.js";
 import { refreshTtsLanguageOptions } from "./settings.js";
 
 let uploading = false;
@@ -39,10 +39,7 @@ function renderSidebar() {
     item.className = "persona";
     item.dataset.name = p.name;
 
-    const av = document.createElement("div");
-    av.className = "avatar";
-    av.style.cssText = avatarCss(p);
-    av.textContent = initials(p.name);
+    const av = avatarEl(p, "avatar");
 
     const info = document.createElement("div");
     info.className = "persona-info";
@@ -494,7 +491,75 @@ async function openPersonaModal(name) {
   trInput.placeholder = "Sin transcripción";
   trF.appendChild(trInput);
 
-  body.append(nameF, descF, promptF, colorF, voiceF, trF);
+  // foto: preview (solo muestra) + botones explícitos de subir/quitar
+  const avF = mkField("Foto");
+  const avRow = document.createElement("div");
+  avRow.className = "pm-avatar-row";
+  let avPrevEl = avatarEl(p, "pm-avatar");
+  const avButtons = document.createElement("div");
+  avButtons.className = "pm-avatar-btns";
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = ".png,.jpg,.jpeg,.webp,.gif,image/*";
+  fileInput.hidden = true;
+  const upBtn = document.createElement("button");
+  upBtn.className = "pm-btn";
+  upBtn.textContent = "Subir foto";
+  const rmBtn = document.createElement("button");
+  rmBtn.className = "pm-btn danger";
+  rmBtn.textContent = "Quitar";
+  rmBtn.style.display = p.avatar_image ? "" : "none";
+  avButtons.append(upBtn, rmBtn);
+  avRow.append(avPrevEl, avButtons, fileInput);
+  avF.appendChild(avRow);
+
+  const refreshAvPrev = () => {
+    const next = avatarEl(p, "pm-avatar");
+    avRow.replaceChild(next, avPrevEl);
+    avPrevEl = next;
+    rmBtn.style.display = p.avatar_image ? "" : "none";
+  };
+  upBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    const f = fileInput.files && fileInput.files[0];
+    fileInput.value = "";
+    if (!f) return;
+    upBtn.disabled = true;
+    upBtn.textContent = "Subiendo…";
+    const fd = new FormData();
+    fd.append("file", f);
+    fetch(`/api/personas/${encodeURIComponent(p.name)}/avatar`, { method: "PUT", body: fd })
+      .then(async (res) => {
+        let body = null;
+        try { body = await res.json(); } catch { body = null; }
+        if (!res.ok) {
+          let detail = body ? body.detail : res.statusText;
+          if (typeof detail !== "string") detail = JSON.stringify(detail);
+          throw new Error(detail || `HTTP ${res.status}`);
+        }
+        p.avatar_image = body.avatar_image ?? null;
+        refreshAvPrev();
+        toast("Foto actualizada", "success");
+      })
+      .catch((err) => toast(err.message || "Error al subir la foto", "error"))
+      .finally(() => {
+        upBtn.disabled = false;
+        upBtn.textContent = "Subir foto";
+      });
+  });
+  rmBtn.addEventListener("click", () => {
+    rmBtn.disabled = true;
+    api(`/api/personas/${encodeURIComponent(p.name)}/avatar`, { method: "DELETE" })
+      .then((body) => {
+        p.avatar_image = body.avatar_image ?? null;
+        refreshAvPrev();
+        toast("Foto quitada", "success");
+      })
+      .catch((err) => toast(err.message || "Error al quitar la foto", "error"))
+      .finally(() => { rmBtn.disabled = false; });
+  });
+
+  body.append(avF, nameF, descF, promptF, colorF, voiceF, trF);
 
   const { foot } = buildModalFoot();
   const del = document.createElement("button");
@@ -554,6 +619,13 @@ async function savePersonaModal(p, els, saveBtn) {
         body: { name: newName },
       });
       current = { ...p, name: newName };
+      // el rename renombro el archivo de avatar server-side; el PUT que sigue
+      // debe mandar el path nuevo, no el viejo
+      if (current.avatar_image) {
+        const dot = current.avatar_image.lastIndexOf(".");
+        const ext = dot >= 0 ? current.avatar_image.slice(dot) : "";
+        current.avatar_image = current.avatar_image.replace(/[^/\\]+$/, newName + ext);
+      }
     }
     await api(`/api/personas/${encodeURIComponent(current.name)}`, {
       method: "PUT",
@@ -766,10 +838,7 @@ function openWhoModal() {
     row.className = "persona who-modal-row";
     row.tabIndex = 0;
     if (p) {
-      const av = document.createElement("div");
-      av.className = "avatar";
-      av.style.cssText = avatarCss(p);
-      av.textContent = initials(p.name);
+      const av = avatarEl(p, "avatar");
       const info = document.createElement("div");
       info.className = "persona-info";
       const nm = document.createElement("div");

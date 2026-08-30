@@ -1,7 +1,7 @@
 // persistence.js — historial: carga al cambiar/crear room y al arrancar, mensajes pasados y playback de wavs guardados.
 import { state } from "./state.js";
 import { refreshContextUsage } from "./context.js";
-import { api, toast, avatarCss, initials } from "./utils.js";
+import { api, toast, avatarEl } from "./utils.js";
 import { ttsReady } from "./tts.js";
 import {
   makeCopyButton,
@@ -381,17 +381,17 @@ function renderHistoryMessage(el, m, room) {
   const persona = isUser ? null : state.personas.find((p) => p.name === m.sender);
   const msg = document.createElement("div");
   msg.className = isUser ? "msg user" : "msg";
-  const av = document.createElement("div");
-  av.className = "msg-avatar";
+  let av;
   if (isUser) {
+    av = document.createElement("div");
+    av.className = "msg-avatar";
     av.style.cssText = "background: var(--bg2); color: var(--text-muted);";
     const ai = document.createElement("i");
     ai.className = "ti ti-user";
     ai.style.fontSize = "14px";
     av.appendChild(ai);
   } else {
-    av.style.cssText = avatarCss(persona || {});
-    av.textContent = initials(m.sender);
+    av = avatarEl(persona || { name: m.sender, avatar_color: null }, "msg-avatar");
   }
   const body = document.createElement("div");
   body.className = "msg-body";

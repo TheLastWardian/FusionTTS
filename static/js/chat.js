@@ -1,7 +1,7 @@
 // chat.js — flujo de chat: envío POST /api/chat, streaming SSE, burbujas usuario/persona, cancel.
 import { state } from "./state.js";
 import { refreshContextUsage } from "./context.js";
-import { initials, toast, avatarCss } from "./utils.js";
+import { toast, avatarEl } from "./utils.js";
 import {
   feedAudioChunk,
   onTTSEvent,
@@ -93,10 +93,7 @@ function startPersonaBubble(name) {
   const persona = state.personas.find((p) => p.name === name);
   const msg = document.createElement("div");
   msg.className = "msg";
-  const av = document.createElement("div");
-  av.className = "msg-avatar";
-  av.style.cssText = avatarCss(persona || {});
-  av.textContent = initials(name);
+  const av = avatarEl(persona || { name, avatar_color: null }, "msg-avatar");
   const body = document.createElement("div");
   body.className = "msg-body";
   const meta = document.createElement("div");

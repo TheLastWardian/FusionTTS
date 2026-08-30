@@ -30,6 +30,15 @@ AUDIO_MEDIA_TYPES = {
     ".flac": "audio/flac",
 }
 
+AVATAR_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+AVATAR_MAX_BYTES = 15 * 1024 * 1024
+
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _ENG_SUFFIX = "_Eng"
 _LATINO_SUFFIX = "_Latino"
@@ -310,6 +319,81 @@ async def update_persona(request: Request, name: str, payload: Persona) -> dict:
         raise HTTPException(status_code=404, detail=f"persona not found: {name}")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _resolve_avatar_file(store, rel: str | None) -> Path | None:
+    if not rel:
+        return None
+    rel_path = Path(rel)
+    if rel_path.is_absolute() or ".." in rel_path.parts:
+        return None
+    candidate = store.avatar_dir.parent / rel_path
+    try:
+        candidate.resolve().relative_to(store.avatar_dir.resolve())
+    except (OSError, ValueError):
+        return None
+    return candidate
+
+
+@router.put("/personas/{name}/avatar")
+async def upload_avatar(request: Request, name: str, file: UploadFile = File(...)) -> dict:
+    store = _persona_store(request)
+    persona = store.get(name)
+    if persona is None:
+        raise HTTPException(status_code=404, detail=f"persona not found: {name}")
+    filename = Path(file.filename or "").name
+    suffix = Path(filename).suffix.lower()
+    if suffix not in AVATAR_MEDIA_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"formato de imagen no soportado: {suffix or 'sin extension'} (usa .png, .jpg, .webp o .gif)",
+        )
+    data = await file.read()
+    if len(data) > AVATAR_MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"imagen demasiado pesada: {len(data) / 1024 / 1024:.1f}MB (maximo 15MB)",
+        )
+    store.avatar_dir.mkdir(parents=True, exist_ok=True)
+    target = store.avatar_dir / f"{name}{suffix}"
+    old = _resolve_avatar_file(store, persona.get("avatar_image"))
+    if old is not None and old != target:
+        _remove_quietly(old)
+    try:
+        target.write_bytes(data)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"error de archivo: {exc}") from exc
+    updated = store.set_avatar(name, f"{store.avatar_dir.name}/{target.name}")
+    return _with_tts_capable(updated)
+
+
+@router.delete("/personas/{name}/avatar")
+async def delete_avatar(request: Request, name: str) -> dict:
+    store = _persona_store(request)
+    persona = store.get(name)
+    if persona is None:
+        raise HTTPException(status_code=404, detail=f"persona not found: {name}")
+    if not persona.get("avatar_image"):
+        raise HTTPException(status_code=400, detail="la persona no tiene foto")
+    target = _resolve_avatar_file(store, persona["avatar_image"])
+    if target is not None:
+        _remove_quietly(target)
+    updated = store.set_avatar(name, None)
+    return _with_tts_capable(updated)
+
+
+@router.get("/personas/{name}/avatar")
+async def get_avatar(request: Request, name: str) -> FileResponse:
+    store = _persona_store(request)
+    persona = store.get(name)
+    if persona is None:
+        raise HTTPException(status_code=404, detail=f"persona not found: {name}")
+    target = _resolve_avatar_file(store, persona.get("avatar_image"))
+    if target is None or not target.is_file():
+        raise HTTPException(status_code=404, detail="la persona no tiene foto")
+    return FileResponse(
+        target, media_type=AVATAR_MEDIA_TYPES.get(target.suffix.lower(), "application/octet-stream")
+    )
 
 
 @router.delete("/personas/{name}")
