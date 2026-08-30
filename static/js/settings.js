@@ -97,7 +97,9 @@ const save = debounce(async () => {
     try {
       const res = await api("/api/config", { method: "POST", body: { key: job.key, value: job.value } });
       state.config[job.key] = res.value;
-      setControl(job.key, res.value);
+      // Si el control ya se movió desde que se encoló el job (drag en curso),
+      // no volverlo a arrastrar por los valores intermedios
+      if (controlUnchanged(job)) setControl(job.key, res.value);
     } catch (err) {
       toast(err.message || "Error al guardar la configuración", "error");
       setControl(job.key, state.config[job.key]);
@@ -105,8 +107,18 @@ const save = debounce(async () => {
   }
 }, 400);
 
+function controlUnchanged(job) {
+  const c = controls[job.key];
+  if (!c) return true;
+  if (c.field.type === "toggle") return c.input.classList.contains("on") === (job.value === true);
+  return String(c.input.value ?? "") === String(job.value ?? "");
+}
+
 function scheduleSave(key, value) {
-  pendingQueue.push({ key, value });
+  // un solo job por key: el ultimo valor del drag gana (sin cola de intermedios)
+  const i = pendingQueue.findIndex((j) => j.key === key);
+  if (i >= 0) pendingQueue[i] = { key, value };
+  else pendingQueue.push({ key, value });
   save();
 }
 
