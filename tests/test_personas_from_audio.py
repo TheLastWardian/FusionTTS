@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 from app import paths
 from app.main import app
 from app.personas import FOR_INSTRUCT_NAME
-from app.routers.personas import parse_name_from_filename, sanitize_audio_stem
+from app.routers.personas import (
+    _extract_json_object,
+    parse_name_from_filename,
+    sanitize_audio_stem,
+)
 from app.services.asr.engine import ASREngineError, ASRTimeoutError
 from app.services.llm import LLMError
 
@@ -283,6 +287,62 @@ def test_llm_nombre_invalido_fallback(client):
     body = r.json()
     assert body["generated"] is False
     assert body["name"] == "Zack"
+
+
+def test_extract_json_prosa_con_llaves_sueltas():
+    obj = json.loads(VALID_JSON)
+    raw = "Claro, consideré {a} y {b} como opciones.\n" + VALID_JSON + "\nEspero que sirva."
+    assert _extract_json_object(raw) == obj
+
+
+def test_extract_json_truncado_da_none():
+    assert _extract_json_object('{"name": "Tifa", "description": "cortada a') is None
+
+
+def test_extract_json_sin_json_da_none():
+    assert _extract_json_object("prosa sin llaves") is None
+
+
+def test_regenerate_recupera_ficha_minima(client):
+    c, asr, llm, _ = client
+    llm.models = ["test-model"]
+    llm.chat_result = "esto no es json, prosa suelta"
+    body = upload(c, "Zack.wav").json()
+    assert body["generated"] is False
+    token = body["token"]
+    llm.chat_result = VALID_JSON
+    r = c.post(f"/api/personas/pending/{token}/regenerate", json={"transcript": asr.text})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["generated"] is True
+    assert d["warning"] is None
+    assert d["name"] == "Tifa"
+    assert d["system_prompt"] == "You are Tifa Lockhart from Final Fantasy VII."
+    assert d["transcript"] == asr.text
+    # el draft regenerado sobrevive al accept
+    r2 = accept(c, token)
+    assert r2.status_code == 200
+    assert r2.json()["generated"] is True
+
+
+def test_regenerate_usa_transcript_editado(client):
+    c, asr, llm, _ = client
+    llm.models = ["test-model"]
+    llm.chat_result = "no es json"
+    token = upload(c, "Zack.wav").json()["token"]
+    edited = asr.text + " (editado por el usuario)"
+    llm.chat_result = VALID_JSON
+    r = c.post(f"/api/personas/pending/{token}/regenerate", json={"transcript": edited})
+    assert r.status_code == 200
+    assert r.json()["transcript"] == edited
+    messages, _ = llm.chat_calls[-1]
+    assert edited in messages[0]["content"]
+
+
+def test_regenerate_404(client):
+    c, _, llm, _ = client
+    r = c.post("/api/personas/pending/nokeno/regenerate", json={})
+    assert r.status_code == 404
 
 
 def test_asr_error_502_y_limpieza(client):

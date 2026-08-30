@@ -283,7 +283,16 @@ function renderUploadPanel() {
   persona.appendChild(sectionLabel("Personaje"));
   const descField = draftField("Descripción", draft.description, "pm-textarea");
   const promptField = draftField("System prompt", draft.system_prompt, "pm-textarea tall");
-  persona.append(descField, promptField);
+  const genBtn = document.createElement("button");
+  genBtn.className = "wav-btn";
+  const gi = document.createElement("i");
+  gi.className = "ti ti-refresh";
+  genBtn.append(gi, document.createTextNode(" Re-generar ficha"));
+  genBtn.addEventListener("click", () => regenerateDraft(genBtn));
+  const pactions = document.createElement("div");
+  pactions.className = "transcript-actions";
+  pactions.appendChild(genBtn);
+  persona.append(descField, promptField, pactions);
   panel.appendChild(persona);
 
   const transcript = document.createElement("div");
@@ -347,6 +356,43 @@ async function retranscribeDraft(btn, box) {
     const r = document.createElement("i");
     r.className = "ti ti-refresh";
     btn.append(r, document.createTextNode(" Re-transcribe"));
+  }
+}
+
+async function regenerateDraft(btn) {
+  if (!draft || !draftEls) return;
+  btn.disabled = true;
+  btn.textContent = "";
+  const icon = document.createElement("i");
+  icon.className = "ti ti-loader spinning";
+  btn.append(icon, document.createTextNode(" Generando ficha…"));
+  try {
+    const body = await api(`/api/personas/pending/${draft.token}/regenerate`, {
+      method: "POST",
+      body: { transcript: draftEls.box.value },
+    });
+    const nameVal = draftEls.name.value;
+    Object.assign(draft, {
+      name: body.name,
+      description: body.description,
+      system_prompt: body.system_prompt,
+      avatar_color: body.avatar_color,
+      language: body.language,
+      transcript: body.transcript,
+      generated: body.generated,
+      warning: body.warning,
+    });
+    if (body.warning) toast(body.warning, "warning");
+    else toast("Ficha re-generada", "success");
+    renderUploadPanel();
+    draftEls.name.value = nameVal;
+  } catch (err) {
+    toast(err.message || "Error al re-generar la ficha", "error");
+    btn.disabled = false;
+    btn.textContent = "";
+    const r = document.createElement("i");
+    r.className = "ti ti-refresh";
+    btn.append(r, document.createTextNode(" Re-generar ficha"));
   }
 }
 

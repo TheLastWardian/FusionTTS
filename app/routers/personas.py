@@ -13,6 +13,7 @@ from app.schemas import (
     PERSONA_NAME_RE,
     Persona,
     PersonaDraftAccept,
+    PersonaDraftRegenerate,
     PersonaRename,
     TranscriptUpdate,
 )
@@ -78,22 +79,50 @@ def _build_prompt(filename: str, transcript: str, language: str | None) -> str:
     )
 
 
+def _balanced_brace_spans(text: str) -> list[tuple[int, int]]:
+    # spans (start, end) de {...} balanceados, respetando strings JSON
+    spans: list[tuple[int, int]] = []
+    depth = 0
+    start = -1
+    in_str = False
+    escaped = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    spans.append((start, i))
+    return spans
+
+
 def _extract_json_object(text: str) -> dict | None:
     candidate = text.strip()
     if candidate.startswith("```"):
         candidate = re.sub(r"^```[a-zA-Z]*\s*|\s*```\s*$", "", candidate, flags=re.S).strip()
-    try:
-        data = json.loads(candidate)
-    except ValueError:
-        start = candidate.find("{")
-        end = candidate.rfind("}")
-        if start < 0 or end <= start:
-            return None
+    # de ultimo a primero: el JSON suele ir al final (tras thinking/prosa que
+    # puede traer llaves sueltas, p. ej. "consideré {a} y {b}")
+    for start, end in reversed(_balanced_brace_spans(candidate)):
         try:
             data = json.loads(candidate[start : end + 1])
         except ValueError:
-            return None
-    return data if isinstance(data, dict) else None
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
 
 
 def _persona_from_llm(data: dict) -> tuple[dict, str] | None:
@@ -160,6 +189,12 @@ async def _generate_persona(
             except LLMError as exc:
                 warning = f"el LLM no respondio ({exc.detail}); se usa la ficha minima"
             if raw is not None and (data := _extract_json_object(raw)) is None:
+                logger.warning(
+                    "from-audio (%s): el LLM no devolvio un JSON valido; respuesta cruda (%d chars): %.1200s",
+                    filename,
+                    len(raw),
+                    raw,
+                )
                 warning = "el LLM no devolvio un JSON valido; se usa la ficha minima"
     if data is not None:
         result = _persona_from_llm(data)
@@ -604,6 +639,44 @@ async def retranscribe_pending_persona(request: Request, token: str) -> dict:
         if token in state.pending_personas:
             state.pending_personas[token]["transcript"] = transcript
     return {"transcript": transcript}
+
+
+@router.post("/personas/pending/{token}/regenerate")
+async def regenerate_pending_persona(
+    request: Request, token: str, payload: PersonaDraftRegenerate
+) -> dict:
+    state = request.app.state.app_state
+    draft = _get_draft(state, token)
+    if draft is None:
+        raise HTTPException(status_code=404, detail=f"draft not found: {token}")
+    transcript = payload.transcript if payload.transcript else draft["transcript"]
+    persona, generated, warning, persona_language = await _generate_persona(
+        state,
+        draft["persona"]["name"],
+        transcript,
+        draft["language"],
+        f"{draft['stem']}.wav",
+    )
+    if warning:
+        logger.warning("from-audio (%s) regenerate: %s", draft["stem"], warning)
+    with state.pending_personas_lock:
+        if token in state.pending_personas:
+            d = state.pending_personas[token]
+            d["persona"] = persona
+            d["language"] = persona_language
+            d["generated"] = generated
+            d["warning"] = warning
+            d["transcript"] = transcript
+    return {
+        "name": persona["name"],
+        "description": persona["description"],
+        "system_prompt": persona["system_prompt"],
+        "avatar_color": persona["avatar_color"],
+        "language": persona_language,
+        "transcript": transcript,
+        "generated": generated,
+        "warning": warning,
+    }
 
 
 @router.get("/persona-audio/{filename:path}")

@@ -46,6 +46,10 @@ class PersonaDraftAccept(BaseModel):
     transcript: str
 
 
+class PersonaDraftRegenerate(BaseModel):
+    transcript: str | None = None
+
+
 class Room(BaseModel):
     name: str
     persona_names: list[str]
