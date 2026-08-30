@@ -497,7 +497,16 @@ async function openPersonaModal(name) {
   const avF = mkField("Foto");
   const avRow = document.createElement("div");
   avRow.className = "pm-avatar-row";
+  const avWrap = document.createElement("div");
+  avWrap.className = "pm-avatar-wrap";
+  avWrap.title = "Subir o arrastrar una imagen acá";
   let avPrevEl = avatarEl(p, "pm-avatar");
+  const badge = document.createElement("span");
+  badge.className = "pm-avatar-badge";
+  const badgeIco = document.createElement("i");
+  badgeIco.className = "ti ti-camera";
+  badge.appendChild(badgeIco);
+  avWrap.append(avPrevEl, badge);
   const avButtons = document.createElement("div");
   avButtons.className = "pm-avatar-btns";
   const fileInput = document.createElement("input");
@@ -512,12 +521,12 @@ async function openPersonaModal(name) {
   rmBtn.textContent = "Quitar";
   rmBtn.style.display = p.avatar_image ? "" : "none";
   avButtons.append(upBtn, rmBtn);
-  avRow.append(avPrevEl, avButtons, fileInput);
+  avRow.append(avWrap, avButtons, fileInput);
   avF.appendChild(avRow);
 
   const refreshAvPrev = () => {
     const next = avatarEl(p, "pm-avatar");
-    avRow.replaceChild(next, avPrevEl);
+    avWrap.replaceChild(next, avPrevEl);
     avPrevEl = next;
     rmBtn.style.display = p.avatar_image ? "" : "none";
   };

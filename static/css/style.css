@@ -795,9 +795,32 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .pm-text { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
 .pm-color { display: flex; align-items: center; gap: 8px; }
 .pm-avatar-row { display: flex; align-items: center; gap: 10px; }
+.pm-avatar-wrap { position: relative; flex-shrink: 0; }
+.pm-avatar { position: relative; }
+/* affordance: el circulo acepta drop — borde dashed al hover + badge de camara */
+.pm-avatar-wrap:hover .pm-avatar {
+  outline: 1px dashed var(--accent-border);
+  outline-offset: 2px;
+}
+.pm-avatar-badge {
+  position: absolute; right: -3px; bottom: -3px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--bg3); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: var(--text-muted);
+  pointer-events: none;
+}
 .pm-avatar-row.dragover .pm-avatar {
   outline: 2px dashed var(--accent);
   outline-offset: 3px;
+}
+.pm-avatar-row.dragover .pm-avatar::after {
+  content: "soltá acá";
+  position: absolute; inset: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.6);
+  font-size: 11px; color: #fff;
+  pointer-events: none;
 }
 /* modal de recorte de foto */
 .crop-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 70; display: flex; align-items: center; justify-content: center; }
