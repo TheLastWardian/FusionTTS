@@ -19,9 +19,10 @@ function setRoom(name) {
 
 function mainRow() {
   const row = document.createElement("div");
-  row.className = "room-row";
+  // "active" va en la fila: el borde dorado de seleccion esta en .room-row.active
+  row.className = "room-row" + (state.room === MAIN_ROOM ? " active" : "");
   const b = document.createElement("button");
-  b.className = "room-item" + (state.room === MAIN_ROOM ? " active" : "");
+  b.className = "room-item";
   const i = document.createElement("i");
   i.className = "ti ti-home";
   const span = document.createElement("span");
@@ -35,9 +36,9 @@ function mainRow() {
 
 function roomRow(r) {
   const row = document.createElement("div");
-  row.className = "room-row";
+  row.className = "room-row" + (r.name === state.room ? " active" : "");
   const b = document.createElement("button");
-  b.className = "room-item" + (r.name === state.room ? " active" : "");
+  b.className = "room-item";
   const i = document.createElement("i");
   i.className = "ti ti-messages";
   const span = document.createElement("span");
