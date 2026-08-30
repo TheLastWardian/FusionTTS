@@ -222,7 +222,7 @@ function buildInstructField(f) {
   }
   const note = document.createElement("div");
   note.className = "cfg-note";
-  note.textContent = "Solo rinde en modo auto/design: no afecta a personas con audio de referencia (voice cloning).";
+  note.textContent = "Con audio de referencia (voice cloning) no cambia rasgos: la referencia gana los conflictos y el instruct solo refuerza rasgos consistentes (p. ej. dialecto chino). Sin referencia (auto/design) define la voz.";
   wrap.appendChild(note);
   controls[f.key] = { field: f, input: null, readout: null, selects };
   setControl(f.key, state.config[f.key]);
