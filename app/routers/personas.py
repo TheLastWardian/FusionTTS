@@ -67,7 +67,7 @@ def _build_prompt(filename: str, transcript: str, language: str | None) -> str:
         '- "name": the character name (letters, numbers, spaces and hyphens only)\n'
         '- "source": the fictional origin (game, anime, show) if identifiable, else ""\n'
         '- "description": one or two sentences describing the character\n'
-        '- "system_prompt": a system prompt for an LLM to role-play as the character\n'
+        '- "system_prompt": the character persona written in first person, starting exactly with "You are" (e.g. "You are Yuffie, a ..."). Never use meta phrasing like "role-play", "roleplay" or "act as"\n'
         '- "color": a hex color for the avatar (e.g. "#2E8B57")\n'
         '- "language": the language the character speaks (ISO code, e.g. "en", "es")\n'
         "If you cannot identify the character, use sensible defaults from the name and the audio content.\n"
