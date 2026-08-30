@@ -692,7 +692,7 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 }
 .slider-r span { font-size: 11px; font-family: var(--mono); color: var(--accent); min-width: 38px; text-align: right; }
 
-.toggle-r { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.toggle-r { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .toggle-r:last-child { border-bottom: none; }
 .toggle-r label { font-size: 12px; color: var(--text-secondary); }
 .tog {
