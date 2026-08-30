@@ -44,7 +44,7 @@ _ENG_SUFFIX = "_Eng"
 _LATINO_SUFFIX = "_Latino"
 _DEFAULT_COLOR = "#888888"
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$")
-_GENERATE_MAX_TOKENS = 600
+_GENERATE_MAX_TOKENS = 1200
 
 
 def sanitize_audio_stem(stem: str) -> str:
