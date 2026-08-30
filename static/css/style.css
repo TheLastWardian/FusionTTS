@@ -660,13 +660,13 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 
 .cfg-group { margin-bottom: 18px; }
 .cfg-label {
-  font-size: 10px; font-weight: 600; color: var(--text-muted);
+  font-size: 11px; font-weight: 700; color: var(--text-secondary);
   letter-spacing: .09em; text-transform: uppercase;
   margin-bottom: 8px; padding-bottom: 5px;
   border-bottom: 1px solid var(--border);
 }
 .cfg-field { margin-bottom: 8px; }
-.cfg-field label { font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 3px; }
+.cfg-field label { font-size: 11px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 3px; }
 .cfg-field input, .cfg-field select, .cfg-field textarea {
   width: 100%; font-size: 12px; padding: 5px 8px;
   border: 1px solid var(--border); border-radius: var(--radius);
@@ -684,7 +684,7 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .cfg-field input:focus, .cfg-field select:focus, .cfg-field textarea:focus { border-color: var(--accent-border); }
 
 .slider-r { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
-.slider-r label { font-size: 12px; color: var(--text-secondary); width: 80px; flex-shrink: 0; }
+.slider-r label { font-size: 11px; font-weight: 500; color: var(--text-secondary); width: 80px; flex-shrink: 0; }
 .slider-r input[type=range] {
   flex: 1; height: 4px; border-radius: 2px;
   accent-color: var(--accent);
@@ -694,7 +694,7 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 
 .toggle-r { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .toggle-r:last-child { border-bottom: none; }
-.toggle-r label { font-size: 12px; color: var(--text-secondary); }
+.toggle-r label { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
 .tog {
   width: 32px; height: 18px; border-radius: 9px;
   background: var(--border-strong); position: relative;
@@ -820,7 +820,7 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .persona-modal-body { padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
 .persona-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
 .pm-field { display: flex; flex-direction: column; gap: 4px; }
-.pm-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); font-weight: 600; }
+.pm-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-secondary); font-weight: 600; }
 .pm-input, .pm-textarea {
   width: 100%;
   font: 12px/1.5 var(--font); color: var(--text-primary);
