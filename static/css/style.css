@@ -656,8 +656,8 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .cfg-field textarea { font-family: var(--font); resize: vertical; line-height: 1.5; }
 .cfg-field select { font-family: var(--font); cursor: pointer; }
 .cfg-field-inline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.cfg-field-inline label { margin-bottom: 0; flex: 1; }
-.cfg-field-inline select { width: auto; }
+.cfg-field-inline label { margin-bottom: 0; white-space: nowrap; }
+.cfg-field-inline select { width: 84px; flex-shrink: 0; }
 .cfg-field input:focus, .cfg-field select:focus, .cfg-field textarea:focus { border-color: var(--accent-border); }
 
 .slider-r { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }

@@ -47,7 +47,7 @@ const TTS_GROUPS = [
       { key: "tts_num_steps", type: "range", min: 1, max: 100, step: 1, kind: "int", label: "Steps" },
       { key: "tts_guidance_scale", type: "range", min: 0.1, max: 3, step: 0.1, kind: "float", label: "Guidance" },
       { key: "tts_speed", type: "range", min: 0.5, max: 2, step: 0.05, kind: "float", label: "Speed" },
-      { key: "tts_language", type: "select", inline: true, label: "Language (auto = detectar por persona)" },
+      { key: "tts_language", type: "select", inline: true, label: "Language", tip: "auto = detectar por persona" },
       { key: "tts_instruct", type: "textarea", label: "Instruct" },
       { key: "tts_seed", type: "number", min: 0, max: 4294967295, label: "Seed", placeholder: "vacío = aleatorio", nullable: true },
       { key: "tts_sentence_timeout", type: "range", min: 5, max: 300, step: 1, kind: "int", label: "Timeout", suffix: " s" },
@@ -146,7 +146,7 @@ export function refreshTtsLanguageOptions() {
     for (const o of opts) {
       const el = document.createElement("option");
       el.value = o;
-      el.textContent = o === "auto" ? "auto (detectar por persona)" : o;
+      el.textContent = o;
       input.appendChild(el);
     }
   }
@@ -191,6 +191,7 @@ function buildField(f) {
     wrap.className = f.inline ? "cfg-field cfg-field-inline" : "cfg-field";
     const label = document.createElement("label");
     label.textContent = f.label;
+    if (f.tip) label.title = f.tip;
     input = document.createElement("select");
     for (const opt of f.options || []) {
       const o = document.createElement("option");
