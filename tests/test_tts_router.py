@@ -83,6 +83,23 @@ def test_01_status(client):
     data = r.json()
     assert data["engine"] == {"state": "stopped", "server": None}
     assert data["dispatcher"] == {"paused": False, "stopped": False, "idle": True}
+    assert data["starting"] is False
+
+
+def test_01b_status_starting_flag(client):
+    c, fake = client
+    assert c.post("/api/tts/enable").status_code == 202
+    # start en vuelo (start_delay=0.2s): starting=True hasta que termina
+    data = c.get("/api/tts/status").json()
+    assert data["starting"] is True
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        data = c.get("/api/tts/status").json()
+        if data["starting"] is False and data["engine"]["state"] == "running":
+            break
+        time.sleep(0.05)
+    assert data["starting"] is False
+    assert data["engine"] == {"state": "running", "server": {"status": "ready"}}
 
 
 def test_02_enable_async(client):
@@ -218,7 +235,17 @@ def test_11_enable_start_failure_stays_disabled(client):
         time.sleep(0.05)
     assert fake.start_calls == 1
     assert c.get("/api/config").json()["tts_enabled"] is False
-    assert c.get("/api/tts/status").json()["engine"]["state"] != "running"
+    # tras el fallo no queda start en vuelo: el cliente detecta el fallo
+    # (starting=False + no ready) y deja de tragar clicks en el chip
+    deadline = time.monotonic() + 3.0
+    data = {}
+    while time.monotonic() < deadline:
+        data = c.get("/api/tts/status").json()
+        if data["starting"] is False:
+            break
+        time.sleep(0.05)
+    assert data["starting"] is False
+    assert data["engine"]["state"] != "running"
 
 
 def test_12_disable_during_load_cancels_arming(client):

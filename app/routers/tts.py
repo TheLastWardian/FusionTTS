@@ -29,6 +29,7 @@ def _spawn(coro: Coroutine[Any, Any, Any]) -> None:
 @router.get("/status")
 async def status(request: Request) -> dict:
     state = _state(request)
+    task = getattr(state, "_tts_start_task", None)
     return {
         "engine": await state.tts_engine.status(),
         "dispatcher": {
@@ -36,6 +37,11 @@ async def status(request: Request) -> dict:
             "stopped": state.dispatcher.is_stopped(),
             "idle": state.dispatcher.is_idle(),
         },
+        # hay un start en vuelo (spawn/load en curso): el cliente lo usa para
+        # distinguir "cargando" de "el enable fallo" (sin esta, tras un fallo
+        # el chip vuelve a off y el flag pendiente se traga clicks hasta el
+        # watchdog, y el boton parece roto)
+        "starting": task is not None and not task.done(),
     }
 
 

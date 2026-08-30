@@ -4,6 +4,7 @@ import { api, toast } from "./utils.js";
 
 let watchdog = null;
 let pendingEnable = false;
+let pendingSince = 0;
 let ctx = null;
 let player = null;
 let currentSrc = null;
@@ -243,21 +244,32 @@ function clearWatchdog() {
 }
 
 function applyStatus() {
-  const { engine, dispatcher } = state.tts || {};
+  const { engine, dispatcher, starting } = state.tts || {};
   if (!engine) return;
   const ready = engine.state === "running" && engine.server && engine.server.status === "ready";
 
-  if (ready && pendingEnable) {
-    pendingEnable = false;
-    clearWatchdog();
+  if (pendingEnable) {
+    if (ready) {
+      pendingEnable = false;
+      clearWatchdog();
+    } else if (!starting && Date.now() - pendingSince > 5000) {
+      // el server ya no tiene un start en vuelo y no esta ready: el enable
+      // fallo (crash del proceso, /load error, OOM...). Antes el flag quedaba
+      // colgado 120s y el guard de onChip tragaba todos los clicks.
+      pendingEnable = false;
+      clearWatchdog();
+      toast("TTS no pudo arrancar; revisá logs/tts-server (ultimo archivo)", "error");
+    }
   }
 
+  // "starting" (server) cubre la fase de spawn: proceso arrancando, /status
+  // todavia no responde -> antes mostraba "off" y parecia que no habia prendido.
   // running + "unloaded" = proceso calido con el modelo descargado = OFF
-  // (VRAM libre); "loading" es la unica fase que muestra "cargando…".
+  // (VRAM libre); "loading" sigue siendo la fase de carga del modelo.
   const srv = engine.state === "running" && engine.server ? engine.server.status : null;
   let st;
   if (srv === "ready") st = "active";
-  else if (srv === "loading") st = "loading";
+  else if (srv === "loading" || starting) st = "loading";
   else st = "off";
   setChip(st);
 
@@ -288,6 +300,7 @@ async function enableTTS() {
     await api("/api/tts/enable", { method: "POST" });
     setChip("loading");
     pendingEnable = true;
+    pendingSince = Date.now();
     clearWatchdog();
     watchdog = setTimeout(async () => {
       pendingEnable = false;
@@ -301,7 +314,8 @@ async function enableTTS() {
         }
         setChip("off");
       }
-    }, 120000); // cold start completo (import + load + warmup); empareja READY_TIMEOUT=120 del engine
+    }, 300000); // backstop: el cold start completo (spawn + health 15s + /load 120s + ready poll)
+    // puede llegar a ~140s; con 120s el watchdog mataba cargas lentas legítimas
   } catch (err) {
     toast(err.message || "Error al encender el TTS", "error");
     setChip("error");
@@ -310,6 +324,7 @@ async function enableTTS() {
 
 async function disableTTS() {
   pendingEnable = false;
+  pendingSince = 0;
   clearWatchdog();
   try {
     await api("/api/tts/disable", { method: "POST" });
@@ -322,20 +337,21 @@ async function disableTTS() {
 
 async function onChip() {
   ensureCtx();
-  const engine = state.tts && state.tts.engine;
+  const t = state.tts;
+  const engine = t && t.engine;
   if (!engine) return;
   const srv = engine.state === "running" ? engine.server && engine.server.status : null;
   if (srv === "ready") {
     disableTTS();
     return;
   }
-  if (srv === "loading") {
-    disableTTS(); // la prensa cancela la carga en curso
+  if (srv === "loading" || (t && t.starting)) {
+    disableTTS(); // la prensa cancela la carga/spawn en curso
     return;
   }
-  if (engine.state === "running" && srv === "unloaded" && pendingEnable) {
-    return; // enable recién disparado (spawn en curso): no hacer nada
-  }
+  // enable ya disparado pero sin "starting" en el server = fallo ya detectado
+  // por applyStatus: permite reintentar de inmediato (antes el guard con
+  // pendingEnable tragaba el click y el boton parecia roto)
   enableTTS();
 }
 
