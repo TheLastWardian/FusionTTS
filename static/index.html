@@ -19,17 +19,17 @@
     <span class="tb-room" id="tb-room">
       <i class="ti ti-messages" title="Room actual (cambiá desde el menú)"></i>
       <span id="room-label" title="Room actual (cambiá desde el menú)">…</span>
-      <span class="ctx-usage" id="ctx-usage" hidden>
-        <span class="ctx-dot" id="ctx-dot"></span>
-        <span class="ctx-num" id="ctx-num">—</span>
-      </span>
-      <button class="tb-icon tb-icon-sm" id="btn-compact" title="Compactar contexto: resume la conversacion (quedan los ultimos 10 mensajes) para no agotar la ventana del LLM" aria-label="Compactar contexto">
-        <i class="ti ti-minimize"></i>
-      </button>
-      <button class="tb-icon tb-icon-sm" id="btn-clear-room" title="Borrar todo el contexto de esta room" aria-label="Borrar chat de la room">
-        <i class="ti ti-trash"></i>
-      </button>
     </span>
+    <span class="ctx-usage" id="ctx-usage">
+      <span class="ctx-dot" id="ctx-dot"></span>
+      <span class="ctx-num" id="ctx-num">—</span>
+    </span>
+    <button class="tb-icon tb-icon-sm" id="btn-compact" title="Compactar contexto: resume la conversacion (quedan los ultimos 10 mensajes) para no agotar la ventana del LLM" aria-label="Compactar contexto">
+      <i class="ti ti-minimize"></i>
+    </button>
+    <button class="tb-icon tb-icon-sm" id="btn-clear-room" title="Borrar todo el contexto de esta room" aria-label="Borrar chat de la room">
+      <i class="ti ti-trash"></i>
+    </button>
     <div class="tb-right">
       <div id="tts-chip" class="tts-chip" title="Click para encender/apagar TTS">
         <div class="tts-wave" id="tts-wave">
