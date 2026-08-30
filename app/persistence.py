@@ -61,6 +61,19 @@ class RoomStore:
     def history_path(self) -> Path:
         return self.dir / "history.json"
 
+    @property
+    def summary_path(self) -> Path:
+        return self.dir / "summary.txt"
+
+    def load_summary(self) -> str | None:
+        # Como history.json: se carga siempre si existe, independientemente
+        # de save_history (ese setting controla si se ESCRIBE).
+        try:
+            text = self.summary_path.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        return text.strip() or None
+
     def _atomic_write_bytes(self, path: Path, data: bytes) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".tmp")
@@ -185,14 +198,40 @@ class RoomStore:
                 self._write_history()
             return text, removed
 
+    def compact_targets(self, keep_last: int) -> list[dict]:
+        # Que se compacta: todo lo que no este dentro de los ultimos
+        # keep_last mensajes y no este ya dentro de un resumen previo.
+        with self._lock:
+            if len(self.history) <= keep_last:
+                return []
+            return [m for m in self.history[:-keep_last] if not m.get("compacted")]
+
+    def apply_compaction(self, uuids: list[str], summary: str) -> int:
+        # Marca los mensajes como incluidos en el resumen y guarda el
+        # resumen (summary.txt). Ambos solo a disco si save_history esta on
+        # (con off viven solo en memoria, igual que el resto del estado).
+        wanted = set(uuids)
+        marked = 0
+        with self._lock:
+            for m in self.history:
+                if m.get("uuid") in wanted:
+                    m["compacted"] = True
+                    marked += 1
+            if self.config.get("save_history"):
+                self._atomic_write_bytes(self.summary_path, summary.encode("utf-8"))
+                self._write_history()
+        return marked
+
     def clear_history(self) -> None:
-        # Borra TODO el contexto de la room (in-memory + history.json si
-        # existe). Los archivos de media (wavs/imagenes) no se tocan.
+        # Borra TODO el contexto de la room (in-memory + history.json/
+        # summary.txt si existen). Los archivos de media no se tocan.
         with self._lock:
             self.history = []
             self._pending_audio.clear()
             if self.history_path.exists():
                 self.history_path.unlink()
+            if self.summary_path.exists():
+                self.summary_path.unlink()
 
     def save_image(self, image_bytes: bytes, ext: str = ".png") -> str | None:
         if not self.config.get("save_history"):

@@ -10,9 +10,17 @@ def build_llm_messages(
     responding_persona: str,
     history: list[dict],
     max_context_turns: int,
+    summary: str | None = None,
 ) -> list[dict]:
+    # Los mensajes compactados (flag "compacted") ya estan representados por
+    # el resumen: entran al contexto solo los que siguen sin resumir.
     messages: list[dict] = [{"role": "system", "content": system_prompt}]
-    recent = history[-max_context_turns:] if max_context_turns else []
+    if summary:
+        messages.append(
+            {"role": "user", "content": "[Contexto previo resumido]\n\n" + summary}
+        )
+    recent = [m for m in history if not m.get("compacted")]
+    recent = recent[-max_context_turns:] if max_context_turns else []
     for msg in recent:
         text = msg.get("text", "")
         if msg.get("role") == "user":

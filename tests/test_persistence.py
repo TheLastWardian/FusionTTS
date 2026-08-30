@@ -284,3 +284,62 @@ def test_delete_removes_directory(store):
     store.delete()
     assert not store.dir.exists()
     store.delete()
+
+
+def test_compact_targets_keeps_tail_and_skips_compacted(store):
+    for i in range(15):
+        store.append(msg("user", "user", f"m{i}", uuid=f"u{i}"))
+    targets = store.compact_targets(10)
+    assert [m["uuid"] for m in targets] == ["u0", "u1", "u2", "u3", "u4"]
+    # los compactados dejan de ser targets
+    assert store.apply_compaction([m["uuid"] for m in targets], "resumen") == 5
+    assert store.compact_targets(10) == []
+
+
+def test_compact_targets_empty_when_not_enough(store):
+    for i in range(8):
+        store.append(msg())
+    assert store.compact_targets(10) == []
+
+
+def test_apply_compaction_marks_and_persists(store, tmp_path):
+    for i in range(12):
+        store.append(msg("user", "user", f"m{i}", uuid=f"u{i}"))
+    targets = store.compact_targets(10)
+    marked = store.apply_compaction([m["uuid"] for m in targets], "resumen X")
+    assert marked == 2
+    assert store.load_summary() == "resumen X"
+    assert (store.summary_path).read_text(encoding="utf-8") == "resumen X"
+    on_disk = json.loads(store.history_path.read_text(encoding="utf-8"))
+    assert [m["uuid"] for m in on_disk if m.get("compacted")] == ["u0", "u1"]
+    # rolling: solo lo no-compactado queda pendiente
+    assert store.compact_targets(10) == []
+
+
+def test_apply_compaction_memory_only_when_save_history_off(store, config):
+    config.set("save_history", False)
+    for i in range(12):
+        store.append(msg("user", "user", f"m{i}", uuid=f"u{i}"))
+    targets = store.compact_targets(10)
+    marked = store.apply_compaction([m["uuid"] for m in targets], "resumen Y")
+    assert marked == 2
+    assert store.load_summary() is None  # no escrito a disco
+    assert not store.summary_path.exists()
+    assert store.history[0]["compacted"] is True  # pero si en memoria
+    assert not store.history_path.exists()
+
+
+def test_clear_history_removes_summary(store):
+    store.append(msg())
+    store.apply_compaction([store.history[0]["uuid"]], "resumen Z")
+    assert store.summary_path.exists()
+    store.clear_history()
+    assert not store.summary_path.exists()
+    assert store.load_summary() is None
+
+
+def test_load_summary_missing_and_empty(store):
+    assert store.load_summary() is None
+    store.summary_path.parent.mkdir(parents=True, exist_ok=True)
+    store.summary_path.write_text("   \n", encoding="utf-8")
+    assert store.load_summary() is None

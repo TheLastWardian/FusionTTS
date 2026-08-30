@@ -303,6 +303,7 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                     persona_name,
                     room_store.history,
                     config.get("max_context_turns"),
+                    summary=room_store.load_summary(),
                 )
                 if index == 0 and description:
                     for message in reversed(messages):

@@ -415,7 +415,7 @@ function renderHistoryMessage(el, m, room) {
   }
   // barra interior: [copiar][reprocesar si usuario][tokens si respuesta] [borrar]
   const left = [makeCopyButton(() => m.text)];
-  if (isUser) left.push(makeReprocessButton(msg, bubble, m.uuid, room));
+  if (isUser) left.push(makeReprocessButton(msg, bubble, m.uuid, room, !!m.compacted));
   const ts = makeTokensSpan(m.tokens);
   if (ts) left.push(ts);
   bubble.appendChild(makeMsgFoot(msg, m.uuid, room, left));

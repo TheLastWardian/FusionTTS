@@ -158,6 +158,42 @@ async function clearRoomChat() {
   }
 }
 
+// Compactar contexto: el server resume todo lo que no este en los ultimos
+// 10 mensajes (resumen rolling) y marca esos mensajes como "compacted".
+async function compactRoomChat() {
+  const btn = document.getElementById("btn-compact");
+  if (btn.disabled) return;
+  if (state.streaming) {
+    toast("Esperá a que termine la respuesta antes de compactar", "warning");
+    return;
+  }
+  const icon = btn.querySelector("i");
+  btn.disabled = true;
+  icon.className = "ti ti-loader spinning";
+  try {
+    const d = await api(
+      "/api/rooms/" + encodeURIComponent(state.room) + "/compact",
+      { method: "POST" },
+    );
+    // el tooltip del boton pasa a mostrar el ultimo resumen (para hojearlo)
+    btn.title = "Ultimo resumen:\n\n" + d.summary;
+    btn.setAttribute("aria-label", "Ver ultimo resumen / compactar contexto");
+    toast(
+      "Contexto compactado: " + d.compacted + " mensajes resumidos " +
+        (d.summary_tokens != null ? "(" + d.summary_tokens + " tokens)" : ""),
+      "success",
+    );
+    // re-render para que la flag "compacted" se vea (reprocesar deshabilitado)
+    await loadHistory(state.room);
+    refreshContextUsage();
+  } catch (err) {
+    toast(err.message || "Error al compactar el contexto", "error");
+  } finally {
+    btn.disabled = false;
+    icon.className = "ti ti-minimize";
+  }
+}
+
 export async function initRooms() {
   const data = await api("/api/rooms");
   state.rooms = data.rooms || [];
@@ -231,6 +267,9 @@ export async function initRooms() {
   };
 
   document.getElementById("btn-clear-room").addEventListener("click", clearRoomChat);
+  document
+    .getElementById("btn-compact")
+    .addEventListener("click", compactRoomChat);
 
   newBtn.addEventListener("click", () => {
     if (state.personas.length === 0) {

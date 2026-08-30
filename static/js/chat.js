@@ -252,14 +252,17 @@ export function makeMsgFoot(msgEl, messageId, room, leftEls, onDeleted) {
 // Boton de reprocesar (mensajes de usuario): rewind desde este mensaje —
 // lo borra junto con todo lo posterior y re-envia el texto para que la
 // room vuelva a responder.
-export function makeReprocessButton(msgEl, bubbleEl, messageId, room) {
+export function makeReprocessButton(msgEl, bubbleEl, messageId, room, disabled = false) {
   const btn = document.createElement("button");
   btn.className = "msg-act msg-act-reproc";
-  btn.title = "Reprocesar desde este mensaje (borra esto y todo lo que viene después)";
+  btn.title = disabled
+    ? "Este mensaje ya está dentro del resumen de compactación (no se puede reprocesar)"
+    : "Reprocesar desde este mensaje (borra esto y todo lo que viene después)";
   btn.setAttribute("aria-label", "Reprocesar desde este mensaje");
   const ico = document.createElement("i");
   ico.className = "ti ti-refresh";
   btn.appendChild(ico);
+  if (disabled) btn.disabled = true;
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
     reprocessFrom(msgEl, bubbleEl, messageId, room);

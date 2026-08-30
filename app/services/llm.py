@@ -41,11 +41,13 @@ class LLMClient:
     def _base_url(self) -> str:
         return str(self._config.get("llm_base_url")).rstrip("/")
 
-    def _build_body(self, messages: list[dict], stream: bool, max_tokens: int | None = None) -> dict:
+    def _build_body(self, messages: list[dict], stream: bool, max_tokens: int | None = None, temperature: float | None = None) -> dict:
         body: dict = {
             "messages": messages,
             "stream": stream,
-            "temperature": self._config.get("llm_temperature"),
+            "temperature": (
+                temperature if temperature is not None else self._config.get("llm_temperature")
+            ),
             "top_p": self._config.get("llm_top_p"),
             "max_tokens": (
                 max_tokens if max_tokens is not None else self._config.get("llm_max_tokens")
@@ -59,10 +61,10 @@ class LLMClient:
             body["stream_options"] = {"include_usage": True}
         return body
 
-    async def chat(self, messages: list[dict], max_tokens: int | None = None) -> str:
+    async def chat(self, messages: list[dict], max_tokens: int | None = None, temperature: float | None = None) -> str:
         url = self._base_url() + "/v1/chat/completions"
         try:
-            resp = await self._client.post(url, json=self._build_body(messages, stream=False, max_tokens=max_tokens))
+            resp = await self._client.post(url, json=self._build_body(messages, stream=False, max_tokens=max_tokens, temperature=temperature))
             resp.raise_for_status()
             data = resp.json()
             return data["choices"][0]["message"]["content"]
