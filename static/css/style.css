@@ -27,6 +27,7 @@
   --danger-border: rgba(240,100,100,0.3);
   --radius: 6px;
   --radius-lg: 10px;
+  --pattern-dot: rgba(232, 232, 240, 0.05);
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 }
@@ -54,6 +55,7 @@ html[data-theme="light"] {
   --danger: #d43f3f;
   --danger-bg: rgba(212,63,63,0.12);
   --danger-border: rgba(212,63,63,0.3);
+  --pattern-dot: rgba(28, 28, 40, 0.08);
 }
 
 html, body { height: 100%; background: var(--bg0); font-family: var(--font); color: var(--text-primary); }
@@ -430,7 +432,11 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
 .list-empty { font-size: 11px; color: var(--text-muted); padding: 8px 10px; }
 
 /* ── Chat ── */
-.chat { grid-column: 2; display: flex; flex-direction: column; background: var(--bg0); overflow: hidden; min-width: 0; }
+.chat {
+  grid-column: 2; display: flex; flex-direction: column; background: var(--bg0); overflow: hidden; min-width: 0;
+  background-image: radial-gradient(var(--pattern-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
 .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
 .messages::-webkit-scrollbar { width: 4px; }
 .messages::-webkit-scrollbar-track { background: transparent; }
@@ -678,8 +684,21 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .cfg-field-inline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .cfg-field-inline label { margin-bottom: 0; white-space: nowrap; }
 .cfg-field-inline select { width: 68px; flex-shrink: 0; }
-.cfg-field-inline.w-auto select { width: auto; }
-.cfg-instruct .cfg-field-inline { margin: 4px 0; }
+/* instruct: labels en columna y selects todos del mismo ancho, alineados */
+.instruct-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 10px; row-gap: 8px;
+  align-items: center;
+}
+.instruct-grid label { font-size: 11px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
+.instruct-grid select {
+  width: 100%; font-size: 12px; padding: 5px 8px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg3); color: var(--text-primary);
+  font-family: var(--font); cursor: pointer; outline: none;
+}
+.instruct-grid select:focus { border-color: var(--accent-border); }
 .cfg-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
 .cfg-field input:focus, .cfg-field select:focus, .cfg-field textarea:focus { border-color: var(--accent-border); }
 
