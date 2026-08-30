@@ -795,6 +795,37 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .pm-text { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
 .pm-color { display: flex; align-items: center; gap: 8px; }
 .pm-avatar-row { display: flex; align-items: center; gap: 10px; }
+.pm-avatar-row.dragover .pm-avatar {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
+/* modal de recorte de foto */
+.crop-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 70; display: flex; align-items: center; justify-content: center; }
+.crop-modal {
+  background: var(--bg1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.crop-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.crop-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.crop-stage {
+  position: relative; width: 280px; height: 280px;
+  overflow: hidden; background: var(--bg2);
+  cursor: grab; user-select: none;
+}
+.crop-stage:active { cursor: grabbing; }
+.crop-img {
+  position: absolute; left: 50%; top: 50%;
+  transform-origin: center center;
+  pointer-events: none; max-width: none;
+}
+/* oscurece todo lo que queda fuera del circulo del avatar */
+.crop-mask {
+  position: absolute; inset: 0; pointer-events: none;
+  border-radius: 50%; border: 1px solid rgba(255,255,255,.25);
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.55);
+}
+.crop-hint { font-size: 11px; color: var(--text-muted); text-align: center; }
+.crop-foot { display: flex; justify-content: flex-end; gap: 8px; }
 .pm-avatar {
   width: 48px; height: 48px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;

@@ -347,6 +347,7 @@ async function rejectDraft() {
 }
 
 let personaModal = null;
+let cropModal = null;
 
 function closePersonaModal() {
   if (!personaModal) return;
@@ -356,7 +357,8 @@ function closePersonaModal() {
 }
 
 function personaModalKey(e) {
-  if (e.key === "Escape") closePersonaModal();
+  // si el modal de recorte esta encima, el Escape lo cierra a el (no al perfil)
+  if (e.key === "Escape" && !cropModal) closePersonaModal();
 }
 
 function buildModalShell(title) {
@@ -524,28 +526,29 @@ async function openPersonaModal(name) {
     const f = fileInput.files && fileInput.files[0];
     fileInput.value = "";
     if (!f) return;
-    upBtn.disabled = true;
-    upBtn.textContent = "Subiendo…";
-    const fd = new FormData();
-    fd.append("file", f);
-    fetch(`/api/personas/${encodeURIComponent(p.name)}/avatar`, { method: "PUT", body: fd })
-      .then(async (res) => {
-        let body = null;
-        try { body = await res.json(); } catch { body = null; }
-        if (!res.ok) {
-          let detail = body ? body.detail : res.statusText;
-          if (typeof detail !== "string") detail = JSON.stringify(detail);
-          throw new Error(detail || `HTTP ${res.status}`);
-        }
-        p.avatar_image = body.avatar_image ?? null;
-        refreshAvPrev();
-        toast("Foto actualizada", "success");
-      })
-      .catch((err) => toast(err.message || "Error al subir la foto", "error"))
-      .finally(() => {
-        upBtn.disabled = false;
-        upBtn.textContent = "Subir foto";
-      });
+    openCropModal(p, f, refreshAvPrev);
+  });
+  // drag&drop sobre el preview (la fila es estable: el preview se re-renderiza)
+  ["dragenter", "dragover"].forEach((ev) =>
+    avRow.addEventListener(ev, (e) => {
+      e.preventDefault();
+      avRow.classList.add("dragover");
+    })
+  );
+  ["dragleave", "drop"].forEach((ev) =>
+    avRow.addEventListener(ev, (e) => {
+      e.preventDefault();
+      avRow.classList.remove("dragover");
+    })
+  );
+  avRow.addEventListener("drop", (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    if (f.type && !f.type.startsWith("image/")) {
+      toast("Solta una imagen (.png, .jpg, .webp o .gif)", "error");
+      return;
+    }
+    openCropModal(p, f, refreshAvPrev);
   });
   rmBtn.addEventListener("click", () => {
     rmBtn.disabled = true;
@@ -676,6 +679,205 @@ async function deletePersona(p, btn) {
   }
   await refreshPersonas();
   renderUploadPanel();
+}
+
+// ---------- recorte de foto (canvas, sin dependencias) ----------
+// flow: elegir/dropear imagen -> modal con viewport circular (zoom con rueda,
+// pan arrastrando) -> "Aplicar" renderiza 512x512 a PNG y sube al endpoint de
+// avatar. El downscale al exportar tambien resuelve el peso del archivo.
+
+const CROP_SIZE = 280; // viewport en px CSS
+const CROP_OUT = 512; // lado del canvas de salida
+const CROP_MAX_ZOOM = 4;
+
+function uploadAvatarFile(p, data, filename, refresh, onDone) {
+  const fd = new FormData();
+  fd.append("file", data, filename);
+  return fetch(`/api/personas/${encodeURIComponent(p.name)}/avatar`, {
+    method: "PUT",
+    body: fd,
+  })
+    .then(async (res) => {
+      let body = null;
+      try {
+        body = await res.json();
+      } catch {
+        body = null;
+      }
+      if (!res.ok) {
+        let detail = body ? body.detail : res.statusText;
+        if (typeof detail !== "string") detail = JSON.stringify(detail);
+        throw new Error(detail || `HTTP ${res.status}`);
+      }
+      p.avatar_image = body.avatar_image ?? null;
+      refresh();
+      toast("Foto actualizada", "success");
+      if (onDone) onDone();
+    })
+    .catch((err) => {
+      toast(err.message || "Error al subir la foto", "error");
+      if (onDone) onDone(err);
+    });
+}
+
+function openCropModal(p, file, refresh) {
+  if (cropModal) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => buildCropModal(p, file, img, url, refresh);
+  img.onerror = () => {
+    URL.revokeObjectURL(url);
+    toast("No se pudo leer la imagen", "error");
+  };
+  img.src = url;
+}
+
+function buildCropModal(p, file, img, url, refresh) {
+  const nw = img.naturalWidth;
+  const nh = img.naturalHeight;
+  // escala base: la imagen "cover" el viewport con zoom 1
+  const base = Math.max(CROP_SIZE / nw, CROP_SIZE / nh);
+  let zoom = 1;
+  let px = 0;
+  let py = 0;
+
+  const overlay = document.createElement("div");
+  overlay.className = "crop-overlay";
+  const box = document.createElement("div");
+  box.className = "crop-modal";
+
+  const head = document.createElement("div");
+  head.className = "crop-head";
+  const title = document.createElement("div");
+  title.className = "crop-title";
+  title.textContent = `Recortar foto de «${p.name}»`;
+  const x = document.createElement("button");
+  x.className = "persona-modal-x";
+  x.title = "Cerrar";
+  x.setAttribute("aria-label", "Cerrar");
+  const xi = document.createElement("i");
+  xi.className = "ti ti-x";
+  x.appendChild(xi);
+  head.append(title, x);
+
+  const stage = document.createElement("div");
+  stage.className = "crop-stage";
+  img.className = "crop-img";
+  img.draggable = false;
+  img.style.width = nw + "px";
+  img.style.height = nh + "px";
+  img.style.marginLeft = -nw / 2 + "px";
+  img.style.marginTop = -nh / 2 + "px";
+  const mask = document.createElement("div");
+  mask.className = "crop-mask";
+  stage.append(img, mask);
+
+  const hint = document.createElement("div");
+  hint.className = "crop-hint";
+  hint.textContent = "Rueda: zoom · Arrastrar: mover";
+
+  const foot = document.createElement("div");
+  foot.className = "crop-foot";
+  const cancel = document.createElement("button");
+  cancel.className = "pm-btn";
+  cancel.textContent = "Cancelar";
+  const apply = document.createElement("button");
+  apply.className = "pm-btn primary";
+  apply.textContent = "Aplicar foto";
+  foot.append(cancel, apply);
+
+  box.append(head, stage, hint, foot);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  cropModal = overlay;
+
+  const applyTransform = () => {
+    const scale = base * zoom;
+    const maxX = Math.max(0, (nw * scale - CROP_SIZE) / 2);
+    const maxY = Math.max(0, (nh * scale - CROP_SIZE) / 2);
+    px = Math.min(maxX, Math.max(-maxX, px));
+    py = Math.min(maxY, Math.max(-maxY, py));
+    img.style.transform = `translate(${px}px, ${py}px) scale(${scale})`;
+  };
+  applyTransform();
+
+  stage.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    zoom = Math.min(CROP_MAX_ZOOM, Math.max(1, zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+    applyTransform();
+  }, { passive: false });
+
+  let dragging = false;
+  let lastX = 0;
+  let lastY = 0;
+  const onMove = (e) => {
+    if (!dragging) return;
+    px += e.clientX - lastX;
+    py += e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    applyTransform();
+  };
+  const onUp = () => {
+    dragging = false;
+  };
+  stage.addEventListener("mousedown", (e) => {
+    dragging = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+
+  const close = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    document.removeEventListener("keydown", onCropKey);
+    overlay.remove();
+    cropModal = null;
+    URL.revokeObjectURL(url);
+  };
+
+  const onCropKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  document.addEventListener("keydown", onCropKey);
+
+  x.addEventListener("click", close);
+  cancel.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+
+  apply.addEventListener("click", () => {
+    apply.disabled = true;
+    cancel.disabled = true;
+    apply.textContent = "Aplicando…";
+    // el viewport [0,CROP_SIZE] se mapea a [0,CROP_OUT]; la imagen vista es
+    // scale * (punto - centro) + (px,py) respecto al centro del viewport
+    const k = CROP_OUT / CROP_SIZE;
+    const scale = base * zoom;
+    const canvas = document.createElement("canvas");
+    canvas.width = CROP_OUT;
+    canvas.height = CROP_OUT;
+    const ctx = canvas.getContext("2d");
+    ctx.translate(CROP_OUT / 2 + k * px, CROP_OUT / 2 + k * py);
+    ctx.scale(k * scale, k * scale);
+    ctx.drawImage(img, -nw / 2, -nh / 2);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          toast("No se pudo generar la imagen", "error");
+          apply.disabled = false;
+          cancel.disabled = false;
+          apply.textContent = "Aplicar foto";
+          return;
+        }
+        uploadAvatarFile(p, blob, "avatar.png", refresh, () => close());
+      },
+      "image/png"
+    );
+  });
 }
 
 async function refreshPersonas() {
