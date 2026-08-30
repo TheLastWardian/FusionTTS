@@ -129,6 +129,7 @@ function controlUnchanged(job) {
   const c = controls[job.key];
   if (!c) return true;
   if (c.field.type === "toggle") return c.input.classList.contains("on") === (job.value === true);
+  if (c.field.type === "instruct") return buildInstructString(c.field, c.selects) === String(job.value ?? "");
   return String(c.input.value ?? "") === String(job.value ?? "");
 }
 
