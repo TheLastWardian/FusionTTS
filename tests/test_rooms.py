@@ -183,7 +183,7 @@ def test_delete_room_clears_session_cache(client):
 
     assert client.delete("/api/rooms/test").status_code == 200
     r = client.get("/api/session/history", params={"room": "test"})
-    assert r.json() == {"room": "test", "messages": []}
+    assert r.json() == {"room": "test", "messages": [], "summary": None}
 
 
 def test_missing_yaml_creates_empty(tmp_path):

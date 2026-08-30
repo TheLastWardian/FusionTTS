@@ -466,6 +466,25 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
   background: var(--bg2); border: 1px solid var(--border);
   white-space: pre-wrap; word-break: break-word;
 }
+/* resumen de compactacion: mensaje especial al principio de la conversacion */
+.msg-compact .msg-body { max-width: 100%; width: 100%; }
+.compact-box {
+  border: 1px dashed var(--accent-border);
+  background: var(--accent-bg);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.compact-head {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none; list-style: none;
+  font-size: 12px; font-weight: 600; color: var(--accent);
+}
+.compact-head::-webkit-details-marker { display: none; }
+.compact-text {
+  margin-top: 8px; font-size: 13px; line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap; word-break: break-word;
+}
 .ctx-usage {
   display: inline-flex; align-items: center; gap: 5px;
   flex-shrink: 0; --ctx-pct: 0; --ctx-color: var(--success);

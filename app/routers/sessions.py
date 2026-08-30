@@ -28,7 +28,11 @@ async def session_history(request: Request, room: str | None = None) -> dict:
         store = request.app.state.app_state.get_room_store(room)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"room": store.room_name, "messages": list(store.history)}
+    return {
+        "room": store.room_name,
+        "messages": list(store.history),
+        "summary": store.load_summary(),
+    }
 
 
 @router.get("/rooms/{room}/context-usage")

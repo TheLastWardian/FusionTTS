@@ -34,7 +34,20 @@ def test_history_returns_seeded_messages(client):
 def test_history_missing_room_200_empty(client):
     r = client.get("/api/session/history", params={"room": "no-such-room"})
     assert r.status_code == 200
-    assert r.json() == {"room": "no-such-room", "messages": []}
+    assert r.json() == {
+        "room": "no-such-room",
+        "messages": [],
+        "summary": None,
+    }
+
+
+def test_history_includes_compaction_summary(client):
+    store = client.app.state.app_state.get_room_store("sumroom")
+    store.append(new_message("user", "user", "hola"))
+    assert client.get("/api/session/history", params={"room": "sumroom"}).json()["summary"] is None
+    store.apply_compaction([store.history[0]["uuid"]], "RESUMEN VISIBLE")
+    r = client.get("/api/session/history", params={"room": "sumroom"})
+    assert r.json()["summary"] == "RESUMEN VISIBLE"
 
 
 def test_history_reads_persisted_history(client, tmp_path):

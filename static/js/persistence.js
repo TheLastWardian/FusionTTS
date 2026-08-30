@@ -444,6 +444,33 @@ function renderHistoryMessage(el, m, room) {
   applyAudioMode(msg);
 }
 
+// Resumen de compactacion: se renderiza como un "mensaje" especial al
+// principio de la conversacion (colapsable). No es un mensaje real: no tiene
+// acciones ni entra al contexto (ya esta dentro del contexto como resumen).
+function renderCompactSummary(summary) {
+  const msg = document.createElement("div");
+  msg.className = "msg msg-compact";
+  const body = document.createElement("div");
+  body.className = "msg-body";
+  const box = document.createElement("details");
+  box.className = "compact-box";
+  box.open = true;
+  const head = document.createElement("summary");
+  head.className = "compact-head";
+  const ico = document.createElement("i");
+  ico.className = "ti ti-minimize";
+  const label = document.createElement("span");
+  label.textContent = "Resumen del contexto previo";
+  head.append(ico, label);
+  const text = document.createElement("div");
+  text.className = "compact-text";
+  text.textContent = summary;
+  box.append(head, text);
+  body.appendChild(box);
+  msg.appendChild(body);
+  return msg;
+}
+
 export async function loadHistory(room) {
   stopHistoryAudio();
   stopSavedSequence();
@@ -456,6 +483,11 @@ export async function loadHistory(room) {
   }
   const el = document.getElementById("messages");
   el.textContent = "";
+  // el resumen de compactacion se muestra como mensaje (colapsable) al
+  // principio de la conversacion
+  if (data.summary) {
+    el.appendChild(renderCompactSummary(data.summary));
+  }
   for (const m of data.messages || []) {
     renderHistoryMessage(el, m, room);
   }
