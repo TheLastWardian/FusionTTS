@@ -416,7 +416,7 @@ def test_image_saved_described_and_injected(client, mock_llm, tmp_path):
     assert len(vision_calls) == 1
     content = vision_calls[0]["messages"][0]["content"]
     assert content[0]["type"] == "text"
-    assert "Describe this image" in content[0]["text"]
+    assert "main action or event" in content[0]["text"]
     url = content[1]["image_url"]["url"]
     assert url.startswith("data:image/png;base64,")
     assert base64.b64decode(url.split(",", 1)[1]) == base64.b64decode(PNG_1X1_B64)
@@ -580,3 +580,15 @@ def test_empty_message_422(client):
         json={"message": "", "chat_room": "test"},
     )
     assert resp.status_code == 422
+
+
+def test_vision_instruction_falls_back_to_default(tmp_path):
+    from app.config import ConfigStore, VISION_PROMPT_DEFAULT
+    from app.routers.chat import _vision_instruction
+
+    config = ConfigStore(settings_path=tmp_path / "settings.json")
+    assert _vision_instruction(config) == VISION_PROMPT_DEFAULT
+    config.set("vision_prompt", "   ")
+    assert _vision_instruction(config) == VISION_PROMPT_DEFAULT
+    config.set("vision_prompt", "Describe only the dog.")
+    assert _vision_instruction(config) == "Describe only the dog."

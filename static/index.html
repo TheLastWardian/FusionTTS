@@ -89,14 +89,17 @@
     </div>
 
     <div class="input-area">
-      <div class="input-row">
+      <div class="image-preview hidden" id="image-preview"></div>
+      <div class="input-row" id="input-row">
         <div class="input-wrap">
           <div class="input-who">
             <span class="input-who-label">Responde:</span>
             <span id="who-chips"></span>
           </div>
-          <textarea class="chat-input" id="chat-input" placeholder="Escribí un mensaje… (Enter para enviar)" rows="1"></textarea>
+          <textarea class="chat-input" id="chat-input" placeholder="Escribí un mensaje… (Enter para enviar, ctrl+V o arrastrar una imagen)" rows="1"></textarea>
         </div>
+        <input type="file" id="image-input" accept="image/*" hidden>
+        <button class="send-btn image-btn" id="btn-image" aria-label="Adjuntar imagen" title="Adjuntar imagen (también ctrl+V o arrastrar al chat)"><i class="ti ti-image"></i></button>
         <button class="send-btn" id="btn-send" aria-label="Enviar mensaje" title="Enviar"><i class="ti ti-send"></i></button>
       </div>
     </div>

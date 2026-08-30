@@ -613,6 +613,23 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
 }
 .send-btn:hover { opacity: .85; }
 .send-btn.cancel { background: var(--danger); }
+.send-btn.image-btn { background: var(--bg3); color: var(--text-secondary); }
+.send-btn.image-btn:hover { color: var(--text-primary); opacity: 1; }
+.image-preview {
+  position: relative; margin-bottom: 6px; padding: 5px;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.image-preview.hidden { display: none; }
+.image-preview img { max-width: 130px; max-height: 96px; border-radius: 4px; display: block; }
+.img-preview-remove {
+  position: absolute; top: 3px; right: 3px;
+  width: 18px; height: 18px; border-radius: 50%;
+  border: none; background: rgba(0,0,0,.65); color: #fff;
+  font-size: 10px; line-height: 1; cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.img-preview-remove:hover { background: var(--danger); }
+.input-row.drag-over .input-wrap { border-color: var(--accent); }
 
 /* ── Right panel ── */
 .right { grid-column: 3; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg0); overflow: hidden; }

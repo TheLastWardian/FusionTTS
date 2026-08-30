@@ -23,6 +23,13 @@ const LLM_GROUPS = [
         placeholder: "regla de como tratar los mensajes que no presenciaron; vacio = desactivado",
         rows: 4,
       },
+      {
+        key: "vision_prompt",
+        type: "textarea",
+        label: "Descripción de imagenes subidas al chat (se envia al LLM)",
+        placeholder: "como describir la imagen para que los personajes reaccionen a la accion; vacio = default",
+        rows: 3,
+      },
       { key: "llm_temperature", type: "range", min: 0, max: 2, step: 0.05, kind: "float", label: "Temperature" },
       { key: "llm_top_p", type: "range", min: 0, max: 1, step: 0.01, kind: "float", label: "Top-p" },
       { key: "llm_max_tokens", type: "number", min: 1, max: 100000, label: "Max tokens" },

@@ -28,11 +28,21 @@ NEWCOMER_PROMPT_DEFAULT = (
     "context, not something to say aloud."
 )
 
+# Instruccion default para describir imagenes subidas al chat: solo la
+# accion/evento principal, sin fondo ni objetos incidentales. Vacio en
+# settings = se usa este default.
+VISION_PROMPT_DEFAULT = (
+    "Describe the main action or event in this image as a short narrative fragment: "
+    "what is happening, what is being done or felt. Ignore background details "
+    "and incidental objects."
+)
+
 DEFAULTS: dict = {
     "llm_base_url": "http://localhost:8080",
     "llm_model": "",
     "global_system_prompt": "",
     "newcomer_prompt": NEWCOMER_PROMPT_DEFAULT,
+    "vision_prompt": VISION_PROMPT_DEFAULT,
     "llm_temperature": 1.0,
     "llm_top_p": 1.0,
     "llm_max_tokens": 20600,
@@ -66,6 +76,7 @@ SPECS: dict[str, KeySpec] = {
     "llm_model": KeySpec("str"),
     "global_system_prompt": KeySpec("str"),
     "newcomer_prompt": KeySpec("str"),
+    "vision_prompt": KeySpec("str"),
     "llm_temperature": KeySpec("float", 0, 2),
     "llm_top_p": KeySpec("float", 0, 1),
     "llm_max_tokens": KeySpec("int", 1, 100000),

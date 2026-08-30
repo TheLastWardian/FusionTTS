@@ -23,8 +23,15 @@ import {
 let initialized = false;
 let ta = null;
 let btnSend = null;
+let btnImage = null;
+let imageInput = null;
+let imagePreviewEl = null;
 let messagesEl = null;
 let current = null;
+// imagen adjunta pendiente (boton / ctrl+V / drag&drop): viaja con el
+// proximo send y se limpia despues
+let pendingImage = null;
+let pendingImageDataUrl = "";
 // burbujas por message_id: el audio de una oracion puede llegar cuando
 // current ya apunta a la siguiente persona (la sintesis va atrasada)
 let messageBubbles = new Map();
@@ -51,7 +58,7 @@ function resizeTextarea() {
   ta.style.height = Math.min(ta.scrollHeight, 90) + "px";
 }
 
-function addUserBubble(text, messageId) {
+function addUserBubble(text, messageId, imageUrl) {
   removeEmptyState();
   const msg = document.createElement("div");
   msg.className = "msg user";
@@ -70,6 +77,13 @@ function addUserBubble(text, messageId) {
   const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
   bubble.textContent = text;
+  if (imageUrl) {
+    const img = document.createElement("img");
+    img.className = "msg-image";
+    img.src = imageUrl;
+    img.alt = "";
+    bubble.appendChild(img);
+  }
   bubble.title = "Doble click para editar";
   bubble.addEventListener("dblclick", () => beginMessageEdit(msg, bubble, messageId, state.room));
   const getText = () => {
@@ -436,19 +450,29 @@ function makeOnEvent(gen) {
 
 async function send() {
   const text = ta.value.trim();
-  if (!text || state.streaming) return;
+  if ((!text && !pendingImage) || state.streaming) return;
   const messageId = crypto.randomUUID();
   ta.value = "";
   resizeTextarea();
-  await doSend(text, messageId);
+  await doSend(text || "(imagen)", messageId);
 }
 
 async function doSend(text, messageId) {
-  addUserBubble(text, messageId);
+  // capturar ANTES de limpiar: la imagen viaja con este send y nada mas
+  const imageToSend = pendingImage;
+  const imageDataUrl = pendingImageDataUrl;
+  addUserBubble(text, messageId, imageToSend ? imageDataUrl : null);
+  if (imageToSend) clearPendingImage();
   refreshContextUsage();
   state.streaming = true;
   updateSendButton();
   const gen = ++streamGen;
+  let imageBase64 = null;
+  let imageMime = null;
+  if (imageToSend && imageDataUrl) {
+    imageBase64 = imageDataUrl.split(",")[1];
+    imageMime = imageToSend.type;
+  }
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -458,6 +482,8 @@ async function doSend(text, messageId) {
         who_answers: state.who,
         chat_room: state.room,
         message_id: messageId,
+        image_base64: imageBase64,
+        image_mime: imageMime,
       }),
     });
     if (!res.ok) {
@@ -509,7 +535,64 @@ function updateSendButton() {
     btnSend.title = "Enviar";
     btnSend.setAttribute("aria-label", "Enviar mensaje");
     ico.className = "ti ti-send";
-    btnSend.disabled = !ta.value.trim();
+    btnSend.disabled = !ta.value.trim() && !pendingImage;
+  }
+}
+
+function onImageFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  if (file.size > 10 * 1024 * 1024) {
+    toast("Imagen muy grande (máx. 10 MB)", "error");
+    return;
+  }
+  pendingImage = file;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    pendingImageDataUrl = ev.target.result;
+    renderImagePreview();
+    if (!state.streaming) btnSend.disabled = false;
+  };
+  reader.onerror = () => {
+    pendingImage = null;
+    toast("No se pudo leer la imagen", "error");
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderImagePreview() {
+  imagePreviewEl.textContent = "";
+  const img = document.createElement("img");
+  img.src = pendingImageDataUrl;
+  img.alt = "preview";
+  const rm = document.createElement("button");
+  rm.type = "button";
+  rm.className = "img-preview-remove";
+  rm.title = "Quitar imagen";
+  rm.textContent = "\u2715";
+  rm.addEventListener("click", clearPendingImage);
+  imagePreviewEl.append(img, rm);
+  imagePreviewEl.classList.remove("hidden");
+}
+
+function clearPendingImage() {
+  pendingImage = null;
+  pendingImageDataUrl = "";
+  imagePreviewEl.textContent = "";
+  imagePreviewEl.classList.add("hidden");
+  if (imageInput) imageInput.value = "";
+  if (!state.streaming) btnSend.disabled = !ta.value.trim();
+}
+
+function onImagePaste(e) {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith("image/")) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (file) onImageFile(file);
+      return;
+    }
   }
 }
 
@@ -518,11 +601,14 @@ export function initChat() {
   initialized = true;
   ta = document.getElementById("chat-input");
   btnSend = document.getElementById("btn-send");
+  btnImage = document.getElementById("btn-image");
+  imageInput = document.getElementById("image-input");
+  imagePreviewEl = document.getElementById("image-preview");
   messagesEl = document.getElementById("messages");
 
   ta.addEventListener("input", () => {
     resizeTextarea();
-    if (!state.streaming) btnSend.disabled = !ta.value.trim();
+    if (!state.streaming) btnSend.disabled = !ta.value.trim() && !pendingImage;
   });
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -534,6 +620,28 @@ export function initChat() {
     if (state.streaming) cancelChat();
     else send();
   });
+  btnImage.addEventListener("click", () => imageInput.click());
+  imageInput.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) onImageFile(file);
+    imageInput.value = "";
+  });
+  ta.addEventListener("paste", onImagePaste);
+  // drag & drop de imagenes sobre el composer
+  const inputRow = document.getElementById("input-row");
+  if (inputRow) {
+    inputRow.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      inputRow.classList.add("drag-over");
+    });
+    inputRow.addEventListener("dragleave", () => inputRow.classList.remove("drag-over"));
+    inputRow.addEventListener("drop", (e) => {
+      e.preventDefault();
+      inputRow.classList.remove("drag-over");
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) onImageFile(file);
+    });
+  }
   window.addEventListener("tts:status", () => {
     messagesEl.querySelectorAll(".msg").forEach((m) => applyAudioMode(m));
   });

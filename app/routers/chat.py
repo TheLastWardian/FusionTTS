@@ -11,6 +11,7 @@ from typing import AsyncIterator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from app.config import VISION_PROMPT_DEFAULT
 from app.persistence import new_message, validate_room_name
 from app.schemas import ChatRequest
 from app.services import vision
@@ -23,10 +24,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
-_VISION_INSTRUCTION = (
-    "Describe this image briefly for a chat context. "
-    "Focus on people, scene and text visible."
-)
+def _vision_instruction(config) -> str:
+    # Setting visible/editable (vacio = default): los personajes reaccionan a
+    # la accion/evento, no a una lista de lo que se ve en la imagen
+    text = str(config.get("vision_prompt") or "").strip()
+    return text or VISION_PROMPT_DEFAULT
 
 _EXT_BY_MIME = {
     "image/png": ".png",
@@ -238,7 +240,7 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 image_rel = room_store.save_image(image_bytes, ext)
                 try:
                     description = await vision.describe_image(
-                        state.llm, image_bytes, ext, _VISION_INSTRUCTION
+                        state.llm, image_bytes, ext, _vision_instruction(config)
                     )
                 except Exception as exc:
                     logger.warning("chat: image description failed: %s", exc)
