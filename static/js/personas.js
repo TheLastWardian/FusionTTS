@@ -86,7 +86,7 @@ function renderSidebar() {
       item.appendChild(vol);
     }
     item.appendChild(editBtn);
-    item.addEventListener("click", () => openPersonaModal(p.name));
+    // click en la fila NO abre el modal: el acceso de edicion es solo el lapiz
     list.appendChild(item);
   }
 }
