@@ -1,8 +1,15 @@
 def build_system_prompt(config, persona: dict) -> str:
-    """Prompt de sistema que se envia para una persona: global + su prompt."""
+    """Prompt de sistema que se envia para una persona: global + newcomer + su prompt.
+
+    newcomer_prompt (setting visible/editable, default no vacio): regla para
+    personajes que entran a mitad de conversacion, ante las notas de presencia.
+    """
     global_prompt = str(config.get("global_system_prompt") or "").strip()
+    newcomer_prompt = str(config.get("newcomer_prompt") or "").strip()
     persona_prompt = (persona.get("system_prompt") or "").strip()
-    return "\n\n".join(part for part in (global_prompt, persona_prompt) if part)
+    return "\n\n".join(
+        part for part in (global_prompt, newcomer_prompt, persona_prompt) if part
+    )
 
 
 _PRESENCE_NOTE = "[Note: the following messages happened while you were not in the room]"

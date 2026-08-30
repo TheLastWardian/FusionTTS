@@ -16,6 +16,13 @@ const LLM_GROUPS = [
         placeholder: "reglas globales, vacío = sin prompt global",
         rows: 4,
       },
+      {
+        key: "newcomer_prompt",
+        type: "textarea",
+        label: "Personajes nuevos que ingresan a la conversacion (se suma al system prompt)",
+        placeholder: "regla de como tratar los mensajes que no presenciaron; vacio = desactivado",
+        rows: 4,
+      },
       { key: "llm_temperature", type: "range", min: 0, max: 2, step: 0.05, kind: "float", label: "Temperature" },
       { key: "llm_top_p", type: "range", min: 0, max: 1, step: 0.01, kind: "float", label: "Top-p" },
       { key: "llm_max_tokens", type: "number", min: 1, max: 100000, label: "Max tokens" },

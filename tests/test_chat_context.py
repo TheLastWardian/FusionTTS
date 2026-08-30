@@ -196,10 +196,20 @@ def test_roomstore_append_stamps_present(tmp_path):
     assert "present" not in m3
 
 
-def test_system_prompt_combines_global_and_persona(tmp_path):
+def test_system_prompt_combines_global_newcomer_persona(tmp_path):
+    from app.config import ConfigStore, NEWCOMER_PROMPT_DEFAULT
+
+    config = ConfigStore(settings_path=tmp_path / "settings.json")
+    config.set("global_system_prompt", "GLOBAL")
+    prompt = build_system_prompt(config, {"system_prompt": "PERSONA"})
+    assert prompt == "GLOBAL\n\n" + NEWCOMER_PROMPT_DEFAULT + "\n\nPERSONA"
+
+
+def test_system_prompt_newcomer_prompt_disabled_when_empty(tmp_path):
     from app.config import ConfigStore
 
     config = ConfigStore(settings_path=tmp_path / "settings.json")
     config.set("global_system_prompt", "GLOBAL")
+    config.set("newcomer_prompt", "")
     prompt = build_system_prompt(config, {"system_prompt": "PERSONA"})
     assert prompt == "GLOBAL\n\nPERSONA"
