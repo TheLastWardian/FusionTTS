@@ -374,7 +374,13 @@ def test_echo_chamber_verbatim_no_llm(client, mock_llm):
     )
     assert resp.status_code == 200
     events = parse_events(resp.text)
-    assert [e["type"] for e in events] == ["start", "token", "done", "complete"]
+    assert [e["type"] for e in events] == [
+        "start",
+        "token",
+        "done",
+        "text_done",
+        "complete",
+    ]
     assert events[0]["persona"] == "Fischl"
     assert events[1]["token"] == "hola eco"
     assert events[2]["text"] == "hola eco"

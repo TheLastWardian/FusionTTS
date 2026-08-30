@@ -4,37 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import paths
+from app.config import DEFAULTS
 from app.main import app
 
-ALL_KEYS = {
-    "llm_base_url",
-    "llm_model",
-    "llm_temperature",
-    "llm_top_p",
-    "llm_max_tokens",
-    "tts_enabled",
-    "tts_mode",
-    "tts_engine",
-    "tts_num_steps",
-    "tts_guidance_scale",
-    "tts_seed",
-    "tts_speed",
-    "tts_language",
-    "tts_instruct",
-    "tts_sentence_timeout",
-    "silence_ms",
-    "tts_server_python",
-    "tts_server_port",
-    "tts_int8",
-    "asr_model",
-    "asr_device",
-    "asr_timeout",
-    "max_persona_replies",
-    "persona_name_mentions",
-    "max_context_turns",
-    "save_history",
-    "save_audio",
-}
+# derivado de DEFAULTS: GET /api/config devuelve exactamente esas keys
+ALL_KEYS = set(DEFAULTS.keys())
 
 
 @pytest.fixture

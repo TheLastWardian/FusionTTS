@@ -3,37 +3,11 @@ import json
 import pytest
 
 from app import paths
-from app.config import ConfigError, ConfigStore
+from app.config import DEFAULTS, ConfigError, ConfigStore
 
-ALL_KEYS = {
-    "llm_base_url",
-    "llm_model",
-    "llm_temperature",
-    "llm_top_p",
-    "llm_max_tokens",
-    "tts_enabled",
-    "tts_engine",
-    "tts_mode",
-    "tts_num_steps",
-    "tts_guidance_scale",
-    "tts_seed",
-    "tts_speed",
-    "tts_language",
-    "tts_instruct",
-    "tts_sentence_timeout",
-    "silence_ms",
-    "tts_server_python",
-    "tts_server_port",
-    "tts_int8",
-    "asr_model",
-    "asr_device",
-    "asr_timeout",
-    "max_persona_replies",
-    "persona_name_mentions",
-    "max_context_turns",
-    "save_history",
-    "save_audio",
-}
+# derivado de DEFAULTS: all() devuelve exactamente esas keys (el store parte de
+# dict(DEFAULTS) y _load solo actualiza keys existentes)
+ALL_KEYS = set(DEFAULTS.keys())
 
 
 @pytest.fixture

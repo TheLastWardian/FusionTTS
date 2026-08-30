@@ -131,6 +131,11 @@ async def _tts_pump(
                 raise
             for f in done:
                 if f is audio_f:
+                    if disp.is_stopped():
+                        # stop: nada de audio despues (no se persiste ni se
+                        # entrega); el chunk pudo ganar la carrera contra el
+                        # dreno de audio_q de dispatcher.stop()
+                        continue
                     chunk = audio_f.result()
                     if room_store is not None:
                         rel = room_store.save_wav(
@@ -173,6 +178,14 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
         out: list[str] = []
         if local_q is None:
             return out
+        if state.dispatcher.is_stopped():
+            # stop: se descarta lo que el pump ya habia movido a local_q
+            # (defensa contra la carrera con dispatcher.stop())
+            while True:
+                try:
+                    local_q.get_nowait()
+                except asyncio.QueueEmpty:
+                    return out
         while True:
             try:
                 out.append(_sse(local_q.get_nowait()))
@@ -287,6 +300,11 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 }
             )
 
+            # se inicializan antes del if/else: la rama echo no toca el LLM
+            # (usage_sink vacio -> _tokens_summary devuelve None) pero el
+            # "done" de abajo usa ambos en las dos ramas
+            full_text = ""
+            usage_sink: list = []
             if echo:
                 full_text = req.message
                 yield _sse({"type": "token", "persona": persona_name, "token": full_text})
@@ -310,8 +328,6 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                         if message["role"] == "user":
                             message["content"] += f"\n\n[Attached image description: {description}]"
                             break
-                full_text = ""
-                usage_sink: list = []
                 pending_token = None
                 tick = None
                 try:
