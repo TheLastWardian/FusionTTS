@@ -158,7 +158,7 @@ async def _tts_pump(
 async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
     config = state.config
     room_store = state.get_room_store(req.chat_room)
-    eligible = resolve_room_personas(state.rooms, state.personas, req.chat_room)
+    eligible = resolve_room_personas(state.rooms, state.personas, req.chat_room, config)
     if not eligible:
         yield _sse(
             {"type": "error", "message": f"No eligible personas for room '{req.chat_room}'"}
@@ -502,7 +502,7 @@ async def chat(req: ChatRequest, request: Request):
         names = list(dict.fromkeys(req.who_answers))
         if not names:
             raise HTTPException(status_code=400, detail="who_answers list is empty")
-        eligible = resolve_room_personas(state.rooms, state.personas, req.chat_room)
+        eligible = resolve_room_personas(state.rooms, state.personas, req.chat_room, state.config)
         bad = [n for n in names if n not in eligible]
         if bad:
             raise HTTPException(

@@ -22,6 +22,40 @@ class PersonaExistsError(Exception):
     pass
 
 
+FOR_INSTRUCT_NAME = "For Instruct"
+
+
+def ensure_for_instruct(store: PersonaStore) -> None:
+    """Persona-sistema para voice design (instruct): sin audio de referencia,
+    el modelo genera la voz con el instruct global. Idempotente: si se borro,
+    se re-crea con defaults en el proximo arranque."""
+    if store.get(FOR_INSTRUCT_NAME) is not None:
+        return
+    try:
+        store.create(
+            {
+                "name": FOR_INSTRUCT_NAME,
+                "description": (
+                    "Voz de prueba para voice design (instruct). Sin audio de "
+                    "referencia: el modelo genera la voz con el instruct de la TTS."
+                ),
+                "system_prompt": (
+                    "You are For Instruct, a neutral test voice for voice design "
+                    "(instruct) experiments. Keep replies short and natural."
+                ),
+                "router_hints": [],
+                "avatar_color": "#888888",
+                "avatar_image": None,
+                "reference_audio": None,
+                "reference_audio_transcript": None,
+                "reference_audio_language": None,
+            }
+        )
+        logger.info("persona-sistema %s creada (voice design / instruct)", FOR_INSTRUCT_NAME)
+    except (ValueError, PersonaExistsError) as exc:
+        logger.warning("no se pudo crear la persona-sistema %s: %s", FOR_INSTRUCT_NAME, exc)
+
+
 class PersonaStore:
     def __init__(
         self,

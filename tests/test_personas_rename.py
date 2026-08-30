@@ -43,7 +43,8 @@ def test_rename_happy(client):
     assert body["tts_capable"] is True
     assert client.get("/api/personas/Jean").status_code == 404
     assert client.get("/api/personas/Jean D").status_code == 200
-    assert client.get("/api/personas").json()["personas"][0]["name"] == "Jean D"
+    names = [p["name"] for p in client.get("/api/personas").json()["personas"]]
+    assert "Jean D" in names and "Jean" not in names
 
 
 def test_rename_mapea_rooms(client):

@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from app import paths
 from app.main import app
-from app.personas import PersonaExistsError, PersonaStore
+from app.personas import FOR_INSTRUCT_NAME, PersonaExistsError, PersonaStore
 
 
 @pytest.fixture
@@ -34,10 +34,11 @@ def make_persona(name="Jean", **overrides):
     return persona
 
 
-def test_list_empty(client):
+def test_list_solo_persona_sistema(client):
+    # el lifespan auto-crea "For Instruct" (voice design / instruct)
     r = client.get("/api/personas")
     assert r.status_code == 200
-    assert r.json() == {"personas": []}
+    assert [p["name"] for p in r.json()["personas"]] == [FOR_INSTRUCT_NAME]
 
 
 def test_create_get_list_roundtrip(client):
@@ -47,7 +48,8 @@ def test_create_get_list_roundtrip(client):
     body = r.json()
     assert body == {**p, "tts_capable": True}
 
-    assert client.get("/api/personas").json() == {"personas": [body]}
+    names = [p["name"] for p in client.get("/api/personas").json()["personas"]]
+    assert names == [FOR_INSTRUCT_NAME, "Jean"]
 
     r = client.get("/api/personas/Jean")
     assert r.status_code == 200

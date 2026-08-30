@@ -8,7 +8,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from app import paths
-from app.personas import PersonaExistsError
+from app.personas import FOR_INSTRUCT_NAME, PersonaExistsError
 from app.schemas import (
     PERSONA_NAME_RE,
     Persona,
@@ -232,7 +232,10 @@ def _read_transcript(store, rel: str | None) -> str | None:
 
 @router.get("/personas")
 async def list_personas(request: Request) -> dict:
-    return {"personas": [_with_tts_capable(p) for p in _persona_store(request).list()]}
+    personas = _persona_store(request).list()
+    if not request.app.state.app_state.config.get("show_for_instruct"):
+        personas = [p for p in personas if p.get("name") != FOR_INSTRUCT_NAME]
+    return {"personas": [_with_tts_capable(p) for p in personas]}
 
 
 @router.get("/personas/{name}")

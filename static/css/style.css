@@ -739,6 +739,18 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .pd-actions button.danger:hover { border-color: var(--danger); color: var(--danger); }
 .pd-empty { color: var(--text-muted); font-size: 12px; text-align: center; padding: 30px 10px; }
 
+/* For Instruct (persona-sistema de voice design): toggle de visibilidad */
+.fi-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  cursor: pointer; transition: all .15s;
+}
+.fi-row:hover { border-color: var(--accent-border); background: var(--accent-bg); }
+.fi-row input[type="checkbox"] { margin-top: 2px; accent-color: var(--accent); cursor: pointer; }
+.fi-body { display: flex; flex-direction: column; gap: 1px; }
+.fi-name { font-size: 12px; font-weight: 600; }
+.fi-sub { font-size: 11px; color: var(--text-muted); }
+
 .drop-zone {
   border: 1px dashed var(--border-strong); border-radius: var(--radius);
   padding: 18px; text-align: center; color: var(--text-muted);

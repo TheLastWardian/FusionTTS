@@ -7,12 +7,24 @@ let uploading = false;
 let draft = null;
 let draftEls = null;
 
+// persona-sistema de voice design (instruct): sin audio de referencia; el
+// backend (app/personas.py FOR_INSTRUCT_NAME) la auto-crea y la filtra de la
+// API cuando show_for_instruct=false
+const FOR_INSTRUCT = "For Instruct";
+
 function visiblePersonas() {
-  if (state.room === "default") return state.personas;
-  const r = state.rooms.find((x) => x.name === state.room);
-  if (!r) return state.personas;
-  const names = new Set(r.persona_names || []);
-  return state.personas.filter((p) => names.has(p.name));
+  let list;
+  if (state.room === "default") {
+    list = state.personas;
+  } else {
+    const r = state.rooms.find((x) => x.name === state.room);
+    if (!r) list = state.personas;
+    else {
+      const names = new Set(r.persona_names || []);
+      list = state.personas.filter((p) => names.has(p.name));
+    }
+  }
+  return list.slice().sort((a, b) => (b.name === FOR_INSTRUCT) - (a.name === FOR_INSTRUCT));
 }
 
 export function refreshRoomViews() {
@@ -190,10 +202,43 @@ function draftField(label, value, cls) {
   return f;
 }
 
+function buildForInstructRow() {
+  const row = document.createElement("label");
+  row.className = "fi-row";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = state.config.show_for_instruct !== false;
+  cb.title = "Mostrar u ocultar «For Instruct» en todo el app";
+  const body = document.createElement("span");
+  body.className = "fi-body";
+  const nameEl = document.createElement("span");
+  nameEl.className = "fi-name";
+  nameEl.textContent = FOR_INSTRUCT;
+  const sub = document.createElement("span");
+  sub.className = "fi-sub";
+  sub.textContent = "Voz sin clonación — usa el instruct de la TTS";
+  body.append(nameEl, sub);
+  row.append(cb, body);
+  cb.addEventListener("change", () => toggleForInstruct(cb.checked));
+  return row;
+}
+
+async function toggleForInstruct(value) {
+  try {
+    const res = await api("/api/config", { method: "POST", body: { key: "show_for_instruct", value } });
+    state.config.show_for_instruct = res.value;
+    await refreshPersonas();
+  } catch (err) {
+    toast(err.message || "Error al guardar la visibilidad", "error");
+  }
+  renderUploadPanel();
+}
+
 function renderUploadPanel() {
   const panel = document.getElementById("rpanel-personas");
   panel.textContent = "";
   draftEls = null;
+  panel.appendChild(buildForInstructRow());
   if (!draft) {
     panel.appendChild(buildDropZone());
     const hint = document.createElement("div");
@@ -578,6 +623,9 @@ async function openPersonaModal(name) {
   del.className = "pm-btn danger";
   del.textContent = "Borrar";
   del.style.marginRight = "auto";
+  // persona-sistema: no se borra desde el modal (la salida es el toggle
+  // del panel Añadir persona); si se borrara a mano, se re-crea en el arranque
+  if (p.name === FOR_INSTRUCT) del.style.display = "none";
   del.addEventListener("click", () => deletePersona(p, del));
   const save = document.createElement("button");
   save.className = "pm-btn primary";
@@ -897,6 +945,15 @@ async function refreshPersonas() {
 }
 
 export async function initPersonas() {
+  // corre en paralelo con initSettings: si la config todavia no llego, la
+  // traemos para que el toggle de For Instruct arranque con el estado real
+  if (Object.keys(state.config).length === 0) {
+    try {
+      state.config = await api("/api/config");
+    } catch {
+      // si falla, initSettings la carga igualmente; el checkbox queda en default
+    }
+  }
   await refreshPersonas();
   renderUploadPanel();
 }

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app import paths
 from app.main import app
+from app.personas import FOR_INSTRUCT_NAME
 from app.routers.personas import parse_name_from_filename, sanitize_audio_stem
 from app.services.asr.engine import ASREngineError, ASRTimeoutError
 from app.services.llm import LLMError
@@ -147,7 +148,7 @@ def test_upload_crea_draft_sin_persistir(client):
     assert body["language"] == "en"
     assert "reference_audio" not in body
 
-    assert c.get("/api/personas").json() == {"personas": []}
+    assert [p["name"] for p in c.get("/api/personas").json()["personas"]] == [FOR_INSTRUCT_NAME]
     assert not (tmp / "personas_audio").exists()
     wav = tmp / "personas_pending" / "Tifa_Eng.wav"
     txt = tmp / "personas_pending" / "Tifa_Eng.txt"
@@ -190,7 +191,7 @@ def test_accept_persista_y_mueve_archivos(client):
         (tmp / "personas_pending").iterdir()
     )
     assert c.get("/api/personas/Tifa").status_code == 200
-    assert c.get("/api/personas").json()["personas"][0]["name"] == "Tifa"
+    assert "Tifa" in [p["name"] for p in c.get("/api/personas").json()["personas"]]
     assert accept(c, token).status_code == 404
 
 
@@ -221,7 +222,7 @@ def test_sin_llm_cargado(client):
     assert llm.chat_calls == []
     assert asr.calls[0][1] is None
     assert (tmp / "personas_pending" / "Zack.txt").read_text(encoding="utf-8") == asr.text
-    assert c.get("/api/personas").json() == {"personas": []}
+    assert [p["name"] for p in c.get("/api/personas").json()["personas"]] == [FOR_INSTRUCT_NAME]
 
 
 def test_llm_get_models_falla(client):
@@ -293,7 +294,7 @@ def test_asr_error_502_y_limpieza(client):
     assert "tail de error" in r.json()["detail"]
     assert not (tmp / "personas_pending").exists()
     assert not (tmp / "personas_audio").exists()
-    assert c.get("/api/personas").json() == {"personas": []}
+    assert [p["name"] for p in c.get("/api/personas").json()["personas"]] == [FOR_INSTRUCT_NAME]
 
 
 def test_asr_timeout_502_y_limpieza(client):
@@ -302,7 +303,7 @@ def test_asr_timeout_502_y_limpieza(client):
     r = upload(c, "Tifa_Eng.wav")
     assert r.status_code == 502
     assert not (tmp / "personas_pending").exists()
-    assert c.get("/api/personas").json() == {"personas": []}
+    assert [p["name"] for p in c.get("/api/personas").json()["personas"]] == [FOR_INSTRUCT_NAME]
 
 
 @pytest.mark.parametrize(
@@ -427,7 +428,7 @@ def test_reject_borra_draft_y_archivos(client):
     r = c.delete(f"/api/personas/pending/{token}")
     assert r.status_code == 200
     assert not (tmp / "personas_pending").exists()
-    assert c.get("/api/personas").json() == {"personas": []}
+    assert [p["name"] for p in c.get("/api/personas").json()["personas"]] == [FOR_INSTRUCT_NAME]
     assert c.delete(f"/api/personas/pending/{token}").status_code == 404
     assert accept(c, token).status_code == 404
 

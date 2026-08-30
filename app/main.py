@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import paths
 from app.config import ConfigStore
-from app.personas import PersonaStore
+from app.personas import PersonaStore, ensure_for_instruct
 from app.routers import chat as chat_router
 from app.routers import config as config_router
 from app.routers import personas as personas_router
@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
     state.asr_manager = ASRManager(config)
     state.rooms = RoomConfigStore(config)
     state.personas = PersonaStore(rooms=state.rooms)
+    ensure_for_instruct(state.personas)
     state.dispatcher = TTSDispatcher(
         engine=state.tts_engine,
         personas=state.personas,

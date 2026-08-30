@@ -47,6 +47,7 @@ DEFAULTS: dict = {
     "max_context_turns": 5,
     "save_history": True,
     "save_audio": True,
+    "show_for_instruct": True,
 }
 
 SPECS: dict[str, KeySpec] = {
@@ -78,6 +79,7 @@ SPECS: dict[str, KeySpec] = {
     "max_context_turns": KeySpec("int", 0, 500),
     "save_history": KeySpec("bool"),
     "save_audio": KeySpec("bool"),
+    "show_for_instruct": KeySpec("bool"),
 }
 
 

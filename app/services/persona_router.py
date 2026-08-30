@@ -3,7 +3,7 @@ import random
 import re
 
 from app.config import ConfigStore
-from app.personas import PersonaStore
+from app.personas import FOR_INSTRUCT_NAME, PersonaStore
 from app.rooms import RoomConfigStore
 from app.services.llm import LLMClient
 
@@ -11,9 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_room_personas(
-    rooms: RoomConfigStore, personas: PersonaStore, chat_room: str
+    rooms: RoomConfigStore, personas: PersonaStore, chat_room: str, config: ConfigStore
 ) -> list[str]:
-    all_names = [p["name"] for p in personas.list()]
+    hidden = (
+        {FOR_INSTRUCT_NAME} if not config.get("show_for_instruct") else set()
+    )
+    all_names = [p["name"] for p in personas.list() if p["name"] not in hidden]
     if chat_room.lower() == "default":
         return all_names
     room = next(

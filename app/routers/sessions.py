@@ -46,7 +46,7 @@ async def room_context_usage(request: Request, room: str) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     config = state.config
-    eligible = resolve_room_personas(state.rooms, state.personas, room)
+    eligible = resolve_room_personas(state.rooms, state.personas, room, state.config)
     if not eligible or state.llm is None:
         raise HTTPException(status_code=503, detail="no LLM available for this room")
     persona = state.personas.get(eligible[0])
@@ -205,7 +205,7 @@ async def compact_room(request: Request, room: str) -> dict:
                 f"{COMPACT_KEEP_LAST})"
             ),
         )
-    eligible = resolve_room_personas(state.rooms, state.personas, room)
+    eligible = resolve_room_personas(state.rooms, state.personas, room, state.config)
     if not eligible:
         raise HTTPException(status_code=503, detail="room has no personas")
     previous = store.load_summary()

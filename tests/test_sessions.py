@@ -205,6 +205,13 @@ def _add_persona(client):
 
 def test_compact_200_marks_and_saves_summary(client):
     _add_persona(client)
+    # room registrada con solo Jean: sin record, el compact cae a todas las
+    # personas (incluida la sistema "For Instruct") y el prompt de resumen
+    # usaria el system prompt equivocado
+    client.post(
+        "/api/rooms",
+        json={"name": "rp", "persona_names": ["Jean"], "echo_chamber": False},
+    )
     store = _seed_room(client, "rp", 25)  # 25 -> se compactan 15
     fake = FakeLLM()
     client.app.state.app_state.llm = fake
