@@ -15,9 +15,10 @@ initLayout();
 
 document.getElementById("btn-settings").addEventListener("click", () => {
   if (isNarrow()) openRightDrawer();
-  else setRightTab("settings");
+  else setRightTab("llm");
 });
-document.getElementById("tab-settings").addEventListener("click", () => setRightTab("settings"));
+document.getElementById("tab-llm").addEventListener("click", () => setRightTab("llm"));
+document.getElementById("tab-tts").addEventListener("click", () => setRightTab("tts"));
 document.getElementById("tab-personas").addEventListener("click", () => setRightTab("personas"));
 
 try {

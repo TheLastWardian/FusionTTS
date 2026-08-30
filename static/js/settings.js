@@ -2,7 +2,8 @@
 import { state } from "./state.js";
 import { api, toast, debounce } from "./utils.js";
 
-const FIELDS = [
+// Panel LLM: todo lo que ata al modelo de lenguaje y a la conversacion
+const LLM_GROUPS = [
   {
     group: "LLM",
     items: [
@@ -21,6 +22,25 @@ const FIELDS = [
     ],
   },
   {
+    group: "General",
+    items: [
+      { key: "max_persona_replies", type: "range", min: 1, max: 5, step: 1, kind: "int", label: "Max replies" },
+      { key: "max_context_turns", type: "range", min: 0, max: 500, step: 1, kind: "int", label: "Context turns" },
+      { key: "persona_name_mentions", type: "toggle", label: "Menciones por nombre" },
+    ],
+  },
+  {
+    group: "Persistencia",
+    items: [
+      { key: "save_history", type: "toggle", label: "Save history" },
+    ],
+  },
+];
+
+// Panel TTS: todo lo que ata a la sintesis de voz (incluye ASR del audio de
+// referencia, que solo existe para alimentar al TTS)
+const TTS_GROUPS = [
+  {
     group: "TTS",
     items: [
       { key: "tts_mode", type: "select", options: ["sentences", "full"], label: "Modo de audio (por oraciones / bloque completo)" },
@@ -35,21 +55,6 @@ const FIELDS = [
     ],
   },
   {
-    group: "General",
-    items: [
-      { key: "max_persona_replies", type: "range", min: 1, max: 5, step: 1, kind: "int", label: "Max replies" },
-      { key: "max_context_turns", type: "range", min: 0, max: 500, step: 1, kind: "int", label: "Context turns" },
-      { key: "persona_name_mentions", type: "toggle", label: "Menciones por nombre" },
-    ],
-  },
-  {
-    group: "Persistencia",
-    items: [
-      { key: "save_history", type: "toggle", label: "Save history" },
-      { key: "save_audio", type: "toggle", label: "Save audio" },
-    ],
-  },
-  {
     group: "ASR",
     items: [
       { key: "asr_model", type: "select", options: ["tiny", "base", "small", "medium", "large-v3"], label: "Whisper model" },
@@ -61,6 +66,12 @@ const FIELDS = [
     group: "VRAM",
     items: [
       { key: "tts_int8", type: "toggle", label: "INT8 (menos VRAM, misma calidad)" },
+    ],
+  },
+  {
+    group: "Persistencia",
+    items: [
+      { key: "save_audio", type: "toggle", label: "Save audio" },
     ],
   },
 ];
@@ -255,11 +266,10 @@ function wireField(key) {
   }
 }
 
-export async function initSettings() {
-  state.config = await api("/api/config");
-  const panel = document.getElementById("rpanel-settings");
+function buildPanel(panelId, groups) {
+  const panel = document.getElementById(panelId);
   panel.textContent = "";
-  for (const group of FIELDS) {
+  for (const group of groups) {
     const g = document.createElement("div");
     g.className = "cfg-group";
     const label = document.createElement("div");
@@ -269,4 +279,10 @@ export async function initSettings() {
     for (const f of group.items) g.appendChild(buildField(f));
     panel.appendChild(g);
   }
+}
+
+export async function initSettings() {
+  state.config = await api("/api/config");
+  buildPanel("rpanel-llm", LLM_GROUPS);
+  buildPanel("rpanel-tts", TTS_GROUPS);
 }

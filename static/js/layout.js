@@ -106,11 +106,13 @@ export function toggleLeftDrawer() {
 }
 
 export function setRightTab(tab) {
-  document.getElementById("tab-settings").classList.toggle("active", tab === "settings");
+  document.getElementById("tab-llm").classList.toggle("active", tab === "llm");
+  document.getElementById("tab-tts").classList.toggle("active", tab === "tts");
   document.getElementById("tab-personas").classList.toggle("active", tab === "personas");
-  document.getElementById("rpanel-settings").classList.toggle("active", tab === "settings");
+  document.getElementById("rpanel-llm").classList.toggle("active", tab === "llm");
+  document.getElementById("rpanel-tts").classList.toggle("active", tab === "tts");
   document.getElementById("rpanel-personas").classList.toggle("active", tab === "personas");
-  document.getElementById("btn-settings").classList.toggle("active-tab", tab === "settings");
+  document.getElementById("btn-settings").classList.toggle("active-tab", tab === "llm" || tab === "tts");
   if (isNarrow()) openRightDrawer();
 }
 
