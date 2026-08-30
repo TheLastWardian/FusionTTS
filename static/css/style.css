@@ -758,8 +758,6 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .draft-actions { display: flex; gap: 6px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
 .draft-actions .pm-btn { flex: 1; }
 .pd-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; flex-shrink: 0; }
-.pd-name { font-size: 14px; font-weight: 500; color: var(--text-primary); }
-.pd-subdesc { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 .pd-section { margin-bottom: 12px; }
 .pd-slabel { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; font-weight: 600; }
 .pd-section p { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
@@ -776,17 +774,6 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
   display: flex; align-items: center; gap: 4px; white-space: nowrap;
 }
 .wav-btn:hover { background: var(--bg3); color: var(--text-primary); }
-.pd-actions { display: flex; gap: 6px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
-.pd-actions button {
-  flex: 1; font-size: 12px; padding: 5px 8px;
-  border-radius: var(--radius); border: 1px solid var(--border);
-  background: var(--bg2); color: var(--text-secondary);
-  cursor: pointer; font-family: var(--font);
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-}
-.pd-actions button:hover { background: var(--bg3); color: var(--text-primary); }
-.pd-actions button.danger:hover { border-color: var(--danger); color: var(--danger); }
-.pd-empty { color: var(--text-muted); font-size: 12px; text-align: center; padding: 30px 10px; }
 
 /* For Instruct (persona-sistema de voice design): toggle de visibilidad */
 .fi-row {
