@@ -317,7 +317,7 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
   border-radius: 3px;
   cursor: row-resize;
   flex-shrink: 0;
-  background: transparent;
+  background: var(--border);
   transition: background .1s;
 }
 .split-h:hover { background: var(--accent-border); }

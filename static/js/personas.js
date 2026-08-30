@@ -324,7 +324,7 @@ function renderUploadPanel() {
   ok.className = "pm-btn primary";
   ok.textContent = "Aceptar persona";
   ok.addEventListener("click", acceptDraft);
-  actions.append(cancel, ok);
+  actions.append(ok, cancel);
   panel.appendChild(actions);
 
   draftEls = {
