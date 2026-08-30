@@ -45,9 +45,9 @@ _ENG_SUFFIX = "_Eng"
 _LATINO_SUFFIX = "_Latino"
 _DEFAULT_COLOR = "#888888"
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$")
-# budget generoso: el thinking de los modelos MoE (Qwen3 A3B) puede superar
-# 1200 tokens y dejar `content` vacío; el JSON viene detras del thinking
-_GENERATE_MAX_TOKENS = 4096
+# budget generoso: el thinking de los modelos MoE (Qwen3 A3B) llega a ~3.3k
+# tokens y deja `content` vacío si no le alcanza; el JSON viene detras
+_GENERATE_MAX_TOKENS = 8192
 
 
 def sanitize_audio_stem(stem: str) -> str:
