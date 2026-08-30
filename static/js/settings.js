@@ -48,7 +48,19 @@ const TTS_GROUPS = [
       { key: "tts_guidance_scale", type: "range", min: 0.1, max: 3, step: 0.1, kind: "float", label: "Guidance" },
       { key: "tts_speed", type: "range", min: 0.5, max: 2, step: 0.05, kind: "float", label: "Speed" },
       { key: "tts_language", type: "select", inline: true, label: "Language (auto = detectar por persona)" },
-      { key: "tts_instruct", type: "textarea", label: "Instruct" },
+      {
+        key: "tts_instruct",
+        type: "instruct",
+        label: "Instruct (voice design)",
+        categories: [
+          { key: "gender", label: "Género", options: ["male", "female"] },
+          { key: "age", label: "Edad", options: ["child", "teenager", "young adult", "middle-aged", "elderly"] },
+          { key: "pitch", label: "Pitch", options: ["very low pitch", "low pitch", "moderate pitch", "high pitch", "very high pitch"] },
+          { key: "style", label: "Estilo", options: ["whisper"] },
+          { key: "accent_en", label: "Acento (EN)", options: ["american accent", "british accent", "australian accent", "canadian accent", "indian accent", "chinese accent", "korean accent", "japanese accent", "portuguese accent", "russian accent"] },
+          { key: "dialect_zh", label: "Dialecto (ZH)", options: ["河南话", "陕西话", "四川话", "贵州话", "云南话", "桂林话", "济南话", "石家庄话", "甘肃话", "宁夏话", "青岛话", "东北话"] },
+        ],
+      },
       { key: "tts_seed", type: "number", min: 0, max: 4294967295, label: "Seed", placeholder: "vacío = aleatorio", nullable: true },
       { key: "tts_sentence_timeout", type: "range", min: 5, max: 300, step: 1, kind: "int", label: "Timeout", suffix: " s" },
       { key: "silence_ms", type: "range", min: 0, max: 1000, step: 10, kind: "int", label: "Silence", suffix: " ms" },
@@ -107,6 +119,18 @@ function fmtValue(v, f) {
 function setControl(key, value) {
   const c = controls[key];
   if (!c) return;
+  if (c.field.type === "instruct") {
+    const known = new Set();
+    for (const cat of c.field.categories) for (const o of cat.options) known.add(o);
+    const tokens = String(value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const unknown = tokens.filter((t) => !known.has(t));
+    for (const cat of c.field.categories) {
+      const match = cat.options.find((o) => tokens.includes(o));
+      c.selects[cat.key].value = match ?? "auto";
+    }
+    if (unknown.length) toast(`Instruct con valores no reconocidos: ${unknown.join(", ")} — se descartan al próximo cambio`, "warning");
+    return;
+  }
   if (c.field.type === "toggle") {
     c.input.classList.toggle("on", !!value);
     c.input.setAttribute("aria-pressed", value ? "true" : "false");
@@ -161,7 +185,52 @@ export function refreshTtsLanguageOptions() {
   if (c) c.input.value = cur;
 }
 
+// instruct (voice design): un selector por categoria (doc k2-fsa/OmniVoice
+// docs/voice-design.md) que arma el string comma-separated; todo en "auto" -> ""
+function buildInstructString(f, selects) {
+  const parts = [];
+  for (const cat of f.categories) {
+    const v = selects[cat.key].value;
+    if (v && v !== "auto") parts.push(v);
+  }
+  return parts.join(", ");
+}
+
+function buildInstructField(f) {
+  const wrap = document.createElement("div");
+  wrap.className = "cfg-field cfg-instruct";
+  const label = document.createElement("label");
+  label.textContent = f.label;
+  wrap.appendChild(label);
+  const selects = {};
+  for (const cat of f.categories) {
+    const row = document.createElement("div");
+    row.className = "cfg-field-inline w-auto";
+    const l = document.createElement("label");
+    l.textContent = cat.label;
+    const sel = document.createElement("select");
+    for (const o of ["auto", ...cat.options]) {
+      const el = document.createElement("option");
+      el.value = o;
+      el.textContent = o;
+      sel.appendChild(el);
+    }
+    sel.addEventListener("change", () => scheduleSave(f.key, buildInstructString(f, selects)));
+    selects[cat.key] = sel;
+    row.append(l, sel);
+    wrap.appendChild(row);
+  }
+  const note = document.createElement("div");
+  note.className = "cfg-note";
+  note.textContent = "Solo rinde en modo auto/design: no afecta a personas con audio de referencia (voice cloning).";
+  wrap.appendChild(note);
+  controls[f.key] = { field: f, input: null, readout: null, selects };
+  setControl(f.key, state.config[f.key]);
+  return wrap;
+}
+
 function buildField(f) {
+  if (f.type === "instruct") return buildInstructField(f);
   let wrap, input, readout = null;
 
   if (f.type === "range") {

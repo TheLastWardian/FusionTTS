@@ -658,6 +658,9 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 .cfg-field-inline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .cfg-field-inline label { margin-bottom: 0; white-space: nowrap; }
 .cfg-field-inline select { width: 68px; flex-shrink: 0; }
+.cfg-field-inline.w-auto select { width: auto; }
+.cfg-instruct .cfg-field-inline { margin: 4px 0; }
+.cfg-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
 .cfg-field input:focus, .cfg-field select:focus, .cfg-field textarea:focus { border-color: var(--accent-border); }
 
 .slider-r { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
