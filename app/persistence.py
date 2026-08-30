@@ -56,6 +56,10 @@ class RoomStore:
         self.history: list[dict] = []
         self._lock = threading.Lock()
         self._pending_audio: dict[str, list[str]] = {}
+        # Personas activas en la room al momento de cada append (las estampa
+        # en message["present"]): permite que el contexto marque los mensajes
+        # que cada personaje no presencio. El chat la actualiza por request.
+        self.active_personas: list[str] | None = None
 
     @property
     def history_path(self) -> Path:
@@ -106,6 +110,8 @@ class RoomStore:
 
     def append(self, message: dict) -> dict:
         with self._lock:
+            if self.active_personas is not None:
+                message["present"] = list(self.active_personas)
             self.history.append(message)
             pending = self._pending_audio.pop(message.get("uuid"), [])
             if pending:

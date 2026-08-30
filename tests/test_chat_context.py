@@ -1,5 +1,18 @@
 from app.persistence import new_message
-from app.services.chat_context import build_llm_messages, build_system_prompt
+from app.services.chat_context import (
+    _PRESENCE_NOTE,
+    build_llm_messages,
+    build_system_prompt,
+)
+
+
+def _m(role, sender, text, present=None, compacted=False):
+    m = new_message(role, sender, text)
+    if present is not None:
+        m["present"] = list(present)
+    if compacted:
+        m["compacted"] = True
+    return m
 
 
 def _history(n, compact_from=None):
@@ -79,6 +92,108 @@ def test_user_image_marker():
     m = new_message("user", "user", "mirá", image="images/u1.png")
     msgs = build_llm_messages("SYS", "Jean", [m], 500)
     assert msgs[1]["content"] == "mirá\n\n[Attached image: images/u1.png]"
+
+
+def test_presence_note_when_persona_joins_midway():
+    history = [
+        _m("assistant", "A", "a1", present=["A", "B"]),
+        _m("assistant", "B", "b1", present=["A", "B"]),
+        _m("user", "user", "u1", present=["A", "B", "C"]),
+        _m("assistant", "C", "c1", present=["A", "B", "C"]),
+    ]
+    msgs = build_llm_messages("SYS", "C", history, 500)
+    assert [m["content"] for m in msgs[1:]] == [
+        _PRESENCE_NOTE,
+        "[A]: a1",
+        "[B]: b1",
+        "u1",
+        "c1",
+    ]
+
+
+def test_no_presence_note_when_always_present():
+    history = [
+        _m("assistant", "A", "a1", present=["A", "B"]),
+        _m("user", "user", "u1", present=["A", "B"]),
+    ]
+    msgs = build_llm_messages("SYS", "A", history, 500)
+    assert [m["content"] for m in msgs[1:]] == ["a1", "u1"]
+
+
+def test_no_presence_note_for_legacy_messages():
+    msgs = build_llm_messages("SYS", "Jean", _history(4), 500)
+    assert all(m["content"] != _PRESENCE_NOTE for m in msgs)
+
+
+def test_presence_note_per_absence_run():
+    # C presente -> ausente -> presente -> ausente -> presente: 2 tramos, 2 notas
+    history = [
+        _m("assistant", "C", "c0", present=["A", "C"]),
+        _m("user", "user", "u1", present=["A"]),
+        _m("user", "user", "u2", present=["A", "C"]),
+        _m("assistant", "B", "b1", present=["A"]),
+        _m("user", "user", "u3", present=["A", "C"]),
+    ]
+    msgs = build_llm_messages("SYS", "C", history, 500)
+    contents = [m["content"] for m in msgs[1:]]
+    assert contents.count(_PRESENCE_NOTE) == 2
+    assert contents == [
+        "c0",
+        _PRESENCE_NOTE,
+        "u1",
+        "u2",
+        _PRESENCE_NOTE,
+        "[B]: b1",
+        "u3",
+    ]
+
+
+def test_presence_note_at_window_start():
+    history = [
+        _m("user", "user", "u0", present=["A"]),
+        _m("assistant", "C", "c1", present=["A", "C"]),
+    ]
+    msgs = build_llm_messages("SYS", "C", history, 500)
+    assert msgs[1]["content"] == _PRESENCE_NOTE
+
+
+def test_summary_note_when_compacted_region_partially_missed():
+    history = [
+        _m("user", "user", "u0", present=["A"], compacted=True),
+        _m("assistant", "B", "b0", present=["A", "B"], compacted=True),
+        _m("user", "user", "u1", present=["A", "C"]),
+    ]
+    msgs = build_llm_messages("SYS", "C", history, 500, summary="RESUMEN")
+    assert msgs[1]["content"] == (
+        "[Contexto previo resumido] (part of it happened while you were not in the room)"
+        "\n\nRESUMEN"
+    )
+
+
+def test_summary_plain_label_when_compacted_region_present():
+    history = [
+        _m("user", "user", "u0", present=["A", "C"], compacted=True),
+        _m("user", "user", "u1", present=["A", "C"]),
+    ]
+    msgs = build_llm_messages("SYS", "C", history, 500, summary="RESUMEN")
+    assert msgs[1]["content"] == "[Contexto previo resumido]\n\nRESUMEN"
+
+
+def test_roomstore_append_stamps_present(tmp_path):
+    from app.config import ConfigStore
+    from app.persistence import RoomStore
+
+    config = ConfigStore(settings_path=tmp_path / "settings.json")
+    store = RoomStore("test-room", config, root=tmp_path)
+    store.active_personas = ["A", "B"]
+    m = store.append(new_message("user", "user", "hola"))
+    assert m["present"] == ["A", "B"]
+    store.active_personas = ["A", "B", "C"]
+    m2 = store.append(new_message("assistant", "C", "hi"))
+    assert m2["present"] == ["A", "B", "C"]
+    store.active_personas = None
+    m3 = store.append(new_message("user", "user", "sin set"))
+    assert "present" not in m3
 
 
 def test_system_prompt_combines_global_and_persona(tmp_path):

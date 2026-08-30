@@ -159,6 +159,9 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
     config = state.config
     room_store = state.get_room_store(req.chat_room)
     eligible = resolve_room_personas(state.rooms, state.personas, req.chat_room, config)
+    # presence: cada mensaje agregado en este request queda estampado con el
+    # set de personas activas; el builder de contexto marca lo que cada uno no vio
+    room_store.active_personas = list(eligible)
     if not eligible:
         yield _sse(
             {"type": "error", "message": f"No eligible personas for room '{req.chat_room}'"}
