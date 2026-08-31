@@ -280,6 +280,142 @@ async function saveLayout() {
   }
 }
 
+// ── drag & drop del layout (solo Main) ──────────────────────────────────
+let dropLineEl = null;
+let dropFolderEl = null;
+
+function topLevelRows() {
+  const list = document.getElementById("persona-list");
+  return [...list.querySelectorAll(":scope > .persona:not(.pinned), :scope > .persona-folder")];
+}
+
+// target: {index} (tope) o {folder, index?} (dentro de carpeta).
+// Indices = posiciones en filas renderizadas, INCLUYENDO la fila arrastrada
+// (las funciones puras ajustan internamente).
+function dropTargetAt(e) {
+  if (!dragging || state.room !== "default") return null;
+  const list = document.getElementById("persona-list");
+  const at = document.elementFromPoint(e.clientX, e.clientY);
+  if (!at || !at.closest || !list.contains(at)) return null;
+
+  // sobre un miembro de carpeta
+  const memberRow = at.closest(".persona-children > .persona");
+  if (memberRow && memberRow.dataset.name) {
+    const kids = memberRow.parentElement;
+    if (dragging.kind === "persona") {
+      const rows = [...kids.querySelectorAll(":scope > .persona")];
+      const i = rows.indexOf(memberRow);
+      const rect = memberRow.getBoundingClientRect();
+      return {
+        folder: kids.dataset.folder,
+        index: e.clientY < (rect.top + rect.bottom) / 2 ? i : i + 1,
+      };
+    }
+    // carpeta sobre bloque de otra carpeta: gap antes/despues del bloque
+    const rows = topLevelRows();
+    const fi = rows.findIndex((r) => r.classList.contains("persona-folder") && r.dataset.name === kids.dataset.folder);
+    const rect = kids.getBoundingClientRect();
+    return { index: e.clientY < rect.top + (rect.height) / 2 ? fi : fi + 1 };
+  }
+
+  // sobre la header de una carpeta
+  const folderEl = at.closest(".persona-folder");
+  if (folderEl && folderEl.dataset.name !== undefined) {
+    if (dragging.kind === "persona") return { folder: folderEl.dataset.name };
+    const rows = topLevelRows();
+    const i = rows.indexOf(folderEl);
+    const rect = folderEl.getBoundingClientRect();
+    return { index: e.clientY < (rect.top + rect.bottom) / 2 ? i : i + 1 };
+  }
+
+  // sobre una persona suelta
+  const personaEl = at.closest(".persona:not(.pinned)");
+  if (personaEl && personaEl.dataset.name && !personaEl.closest(".persona-children")) {
+    const rows = topLevelRows();
+    const i = rows.indexOf(personaEl);
+    if (i !== -1) {
+      const rect = personaEl.getBoundingClientRect();
+      return { index: e.clientY < (rect.top + rect.bottom) / 2 ? i : i + 1 };
+    }
+  }
+
+  return { index: state.personaLayout.length };
+}
+
+function clearDropIndicator() {
+  if (dropLineEl) { dropLineEl.remove(); dropLineEl = null; }
+  if (dropFolderEl) { dropFolderEl.classList.remove("drop-target"); dropFolderEl = null; }
+}
+
+function showDropIndicator(target) {
+  clearDropIndicator();
+  if (!target) return;
+  const list = document.getElementById("persona-list");
+  if (target.folder && target.index == null) {
+    const el = list.querySelector('.persona-folder[data-name="' + CSS.escape(target.folder) + '"]');
+    if (el) { el.classList.add("drop-target"); dropFolderEl = el; }
+    return;
+  }
+  const line = document.createElement("div");
+  line.className = "drop-line";
+  const listRect = list.getBoundingClientRect();
+  let rows;
+  let i;
+  if (target.folder) {
+    const kids = list.querySelector('.persona-children[data-folder="' + CSS.escape(target.folder) + '"]');
+    rows = kids ? [...kids.querySelectorAll(":scope > .persona")] : [];
+    i = Math.max(0, Math.min(target.index, rows.length));
+  } else {
+    rows = topLevelRows();
+    i = Math.max(0, Math.min(target.index, rows.length));
+  }
+  const y = i >= rows.length
+    ? (rows.length ? rows[rows.length - 1].getBoundingClientRect().bottom : listRect.top)
+    : rows[i].getBoundingClientRect().top;
+  line.style.top = Math.max(0, y - listRect.top - list.scrollTop - 1) + "px";
+  list.appendChild(line);
+  dropLineEl = line;
+}
+
+function applyDrop(target) {
+  if (!dragging || !target) return;
+  const was = dragging;
+  let next;
+  if (was.kind === "persona") {
+    next = layout.movePersona(state.personaLayout, was.name, target);
+  } else {
+    const from = state.personaLayout.findIndex((e) => e.type === "folder" && e.name === was.name);
+    if (from === -1) return;
+    next = layout.moveEntry(state.personaLayout, from, target.index);
+  }
+  const same = JSON.stringify(next) === JSON.stringify(state.personaLayout);
+  dragging = null;
+  if (same) return;
+  state.personaLayout = next;
+  renderSidebar();
+  saveLayout();
+}
+
+function initLayoutDnd() {
+  const list = document.getElementById("persona-list");
+  list.addEventListener("dragover", (e) => {
+    if (!dragging || state.room !== "default") return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    showDropIndicator(dropTargetAt(e));
+  });
+  list.addEventListener("dragleave", (e) => {
+    if (!list.contains(e.relatedTarget)) clearDropIndicator();
+  });
+  list.addEventListener("drop", (e) => {
+    if (!dragging || state.room !== "default") return;
+    e.preventDefault();
+    const target = dropTargetAt(e);
+    clearDropIndicator();
+    applyDrop(target);
+  });
+}
+
 // filas arrastrables (handlers de drop: Task 5)
 function wireDraggableRow(el, kind, name) {
   el.draggable = true;
@@ -1210,6 +1346,7 @@ export async function initPersonas() {
   }
   await refreshPersonas();
   document.getElementById("btn-new-folder").addEventListener("click", createFolder);
+  initLayoutDnd();
   renderUploadPanel();
 }
 

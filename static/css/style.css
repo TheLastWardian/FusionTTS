@@ -321,6 +321,8 @@ body:not(.mode-narrow) .app.left-collapsed .left { display: none; }
 .folder-del:hover { color: var(--danger); background: var(--danger-bg); }
 .persona-children { margin: 0 0 2px 12px; padding-left: 8px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
 .persona.dragging, .persona-folder.dragging { opacity: .4; }
+.drop-line { position: absolute; left: 6px; right: 6px; height: 2px; background: var(--accent); border-radius: 1px; z-index: 2; pointer-events: none; }
+.persona-folder.drop-target { border-color: var(--accent); background: var(--accent-bg); }
 
 .rooms-section {
   height: var(--rooms-h, 190px);
