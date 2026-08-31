@@ -69,6 +69,7 @@ class PersonaStore:
         self.avatar_dir = Path(avatar_dir) if avatar_dir is not None else paths.PERSONAS_AVATARS_DIR
         self.rooms: RoomConfigStore | None = rooms
         self._personas: list[dict] = []
+        self._layout: list[dict] | None = None
         self._lock = threading.Lock()
         self._load()
 
@@ -88,6 +89,9 @@ class PersonaStore:
                 self._personas = [
                     self._normalize(dict(persona)) for persona in data if isinstance(persona, dict)
                 ]
+            if isinstance(raw, dict):
+                layout_raw = raw.get("layout")
+                self._layout = layout_raw if isinstance(layout_raw, list) else None
 
     @staticmethod
     def _normalize(persona: dict) -> dict:
@@ -100,8 +104,11 @@ class PersonaStore:
 
     def _persist_locked(self) -> None:
         self.yaml_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"personas": self._personas}
+        if self._layout is not None:
+            payload["layout"] = self._layout
         payload = yaml.safe_dump(
-            {"personas": self._personas},
+            payload,
             sort_keys=False,
             allow_unicode=True,
             default_flow_style=False,
@@ -185,6 +192,91 @@ class PersonaStore:
             self.rooms.remove_persona(name)
         self._delete_audio_files(persona)
         self._delete_avatar_file(persona)
+
+    def get_layout(self) -> list[dict]:
+        with self._lock:
+            return self._normalize_layout(self._layout)
+
+    def save_layout(self, layout: list) -> list[dict]:
+        validated = self._validate_layout(layout)
+        with self._lock:
+            self._layout = self._normalize_layout(validated)
+            self._persist_locked()
+            return [dict(entry) for entry in self._layout]
+
+    def _normalize_layout(self, raw: list | None) -> list[dict]:
+        """Reglas de la spec v2: desconocidos fuera, duplicados ganan la
+        primera aparicion, For Instruct fuera, faltantes al final (orden de store)."""
+        existing = {p["name"] for p in self._personas if p.get("name")}
+        existing.discard(FOR_INSTRUCT_NAME)
+        out: list[dict] = []
+        seen: set[str] = set()
+        folders: set[str] = set()
+        if isinstance(raw, list):
+            for entry in raw:
+                if not isinstance(entry, dict):
+                    continue
+                name = entry.get("name")
+                if not isinstance(name, str) or not name:
+                    continue
+                etype = entry.get("type")
+                if etype == "persona":
+                    if name in existing and name not in seen:
+                        seen.add(name)
+                        out.append({"type": "persona", "name": name})
+                elif etype == "folder":
+                    if name in folders:
+                        continue
+                    members = entry.get("personas")
+                    clean = [
+                        m
+                        for m in (members if isinstance(members, list) else [])
+                        if isinstance(m, str) and m in existing and m not in seen
+                    ]
+                    folders.add(name)
+                    seen.update(clean)
+                    out.append({"type": "folder", "name": name, "personas": clean})
+        for persona in self._personas:
+            name = persona.get("name")
+            if name in existing and name not in seen:
+                seen.add(name)
+                out.append({"type": "persona", "name": name})
+        return out
+
+    @staticmethod
+    def _validate_layout(layout: list) -> list[dict]:
+        if not isinstance(layout, list):
+            raise ValueError("layout debe ser una lista")
+        out: list[dict] = []
+        folder_names: set[str] = set()
+        seen: set[str] = set()
+        for entry in layout:
+            if not isinstance(entry, dict):
+                raise ValueError("cada entrada del layout debe ser un objeto")
+            etype = entry.get("type")
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                raise ValueError("entrada de layout: 'name' debe ser un string no vacio")
+            if etype == "persona":
+                if name in seen:
+                    raise ValueError(f"la persona {name!r} aparece mas de una vez en el layout")
+                seen.add(name)
+                out.append({"type": "persona", "name": name})
+            elif etype == "folder":
+                if name in folder_names:
+                    raise ValueError(f"carpeta duplicada: {name!r}")
+                folder_names.add(name)
+                members = entry.get("personas", [])
+                if not isinstance(members, list) or not all(isinstance(m, str) for m in members):
+                    raise ValueError(f"carpeta {name!r}: 'personas' debe ser una lista de strings")
+                for m in members:
+                    if m in seen:
+                        raise ValueError(f"la persona {m!r} aparece mas de una vez en el layout")
+                    seen.add(m)
+                out.append({"type": "folder", "name": name, "personas": list(members)})
+            else:
+                raise ValueError(f"type de entrada de layout invalido: {etype!r}")
+        return out
 
     def _delete_audio_files(self, persona: dict) -> None:
         for key in ("reference_audio", "reference_audio_transcript"):
