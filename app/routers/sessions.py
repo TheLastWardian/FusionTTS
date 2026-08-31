@@ -220,7 +220,7 @@ async def compact_room(request: Request, room: str) -> dict:
                 {"role": "user", "content": "\n\n".join(parts)},
             ],
             max_tokens=COMPACT_MAX_TOKENS,
-            temperature=0.3,
+            temperature=1.0,
         )
     except LLMError as exc:
         raise HTTPException(
