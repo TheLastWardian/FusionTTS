@@ -406,7 +406,9 @@ function renderHistoryMessage(el, m, room) {
   meta.textContent = isUser ? "Tú" : m.sender;
   const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
-  bubble.textContent = m.text;
+  // "(imagen)" era el placeholder viejo para image-only: no se muestra
+  const legacyImageOnly = !!m.image && m.text.trim() === "(imagen)";
+  if (m.text && !legacyImageOnly) bubble.textContent = m.text;
   if (isUser) {
     // solo los propios se editan (doble click)
     bubble.title = "Doble click para editar";

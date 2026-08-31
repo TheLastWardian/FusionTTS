@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue, model_validator
 
 
 class HealthResponse(BaseModel):
@@ -78,9 +78,17 @@ class ReprocessRequest(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1)
+    # mensaje vacio OK si viaja imagen (image-only, como en cualquier chat LLM);
+    # sin nada, el validator lo rechaza
+    message: str = ""
     who_answers: str | list[str] = "router"
     chat_room: str = "default"
     message_id: str | None = None
     image_base64: str | None = None
     image_mime: str | None = None
+
+    @model_validator(mode="after")
+    def _message_or_image(self) -> "ChatRequest":
+        if not self.message.strip() and not self.image_base64:
+            raise ValueError("message vacio: se necesita texto o imagen")
+        return self

@@ -460,7 +460,7 @@ async function send() {
   const messageId = crypto.randomUUID();
   ta.value = "";
   resizeTextarea();
-  await doSend(text || "(imagen)", messageId);
+  await doSend(text, messageId);
 }
 
 async function doSend(text, messageId) {

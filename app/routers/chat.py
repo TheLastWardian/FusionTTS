@@ -244,10 +244,14 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
         )
 
         if fixed is None:
+            # image-only: el router no ve la imagen; la descripcion la usa de texto
+            route_text = req.message or (
+                f"(imagen: {description})" if description else "(imagen)"
+            )
             try:
                 fixed = await pick_personas(
                     req.who_answers,
-                    req.message,
+                    route_text,
                     eligible,
                     state.personas,
                     state.llm,
