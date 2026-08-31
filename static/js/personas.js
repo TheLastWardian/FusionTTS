@@ -1277,7 +1277,7 @@ async function openPersonaModal(name) {
   const del = document.createElement("button");
   del.className = "pm-btn danger";
   del.textContent = "Borrar";
-  del.style.marginRight = "auto";
+  del.style.marginLeft = "auto";
   // persona-sistema: no se borra desde el modal (la salida es el toggle
   // del panel Añadir persona); si se borrara a mano, se re-crea en el arranque
   if (p.name === FOR_INSTRUCT) del.style.display = "none";
@@ -1288,7 +1288,7 @@ async function openPersonaModal(name) {
   save.addEventListener("click", () =>
     savePersonaModal(p, { name: nameInput, desc: descInput, prompt: promptInput, color: colorInput, transcript: trInput }, save)
   );
-  foot.append(del, foot.firstChild, save);
+  foot.append(save, foot.firstChild, del);
   boxEl.appendChild(foot);
 
   document.body.appendChild(overlay);
