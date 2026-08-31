@@ -483,11 +483,13 @@ function dropTargetAt(e) {
   if (dragging.kind === "persona") {
     let kidsEl = at.closest(".persona-children");
     if (!kidsEl) {
-      // margen junto a un bloque de hijos: el cursor "pertenence" a esa carpeta
+      // margen del list (borde izq/der): se atribuye por eje Y a la carpeta
+      // cuyo bloque de hijos cubre esa altura. Con el check de X el margen
+      // nunca matcheaba (el bloque esta indentado) y el drag por el borde
+      // sacaba la persona al tope, tapando la carpeta siguiente.
       for (const k of list.querySelectorAll(":scope > .persona-children")) {
         const r = k.getBoundingClientRect();
-        if (e.clientX >= r.left - 6 && e.clientX <= r.right + 6 &&
-            e.clientY >= r.top - 4 && e.clientY <= r.bottom + 4) { kidsEl = k; break; }
+        if (e.clientY >= r.top - 4 && e.clientY <= r.bottom + 4) { kidsEl = k; break; }
       }
     }
     if (kidsEl) {

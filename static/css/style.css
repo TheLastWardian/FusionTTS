@@ -314,7 +314,6 @@ body.cols-4 .persona-list, body.cols-4 .persona-children { grid-template-columns
 .persona-card {
   position: relative;
   display: block;
-  aspect-ratio: 100 / 90;
   padding: 0;
   background: var(--bg2);
   border: 1px solid var(--border);
@@ -323,6 +322,10 @@ body.cols-4 .persona-list, body.cols-4 .persona-children { grid-template-columns
   cursor: grab;
   transition: border-color .15s, transform .15s, box-shadow .15s, opacity .15s;
 }
+/* ratio 100:90 via padding in-flow: con aspect-ratio, cuando el grid tiene
+   altura definida (panel izquierdo, flex:1) Chromium colapsa la fila a 2px
+   y la card terminaba tapando a la carpeta siguiente */
+.persona-card::before { content: ""; display: block; padding-top: 90%; }
 .persona-card:hover { border-color: var(--accent-border); transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0, 0, 0, .28); }
 .persona-card:active { cursor: grabbing; }
 .pc-image { position: absolute; inset: 0; overflow: hidden; }
