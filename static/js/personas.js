@@ -2,10 +2,13 @@
 import { state } from "./state.js";
 import { api, avatarCss, initials, avatarEl, toast } from "./utils.js";
 import { refreshTtsLanguageOptions } from "./settings.js";
+import * as layout from "./persona-layout.js";
 
 let uploading = false;
 let draft = null;
 let draftEls = null;
+let folderEditing = null; // {name, isNew} — carpeta con input inline abierto
+let dragging = null; // {kind: "persona"|"folder", name} — DnD (Task 5 completa)
 
 // persona-sistema de voice design (instruct): sin audio de referencia; el
 // backend (app/personas.py FOR_INSTRUCT_NAME) la auto-crea y la filtra de la
@@ -35,60 +38,261 @@ export function refreshRoomViews() {
 function renderSidebar() {
   const list = document.getElementById("persona-list");
   list.textContent = "";
+  const btnNew = document.getElementById("btn-new-folder");
+  if (btnNew) btnNew.hidden = state.room !== "default";
+  if (state.room === "default") renderSidebarMain(list);
+  else renderSidebarRoom(list);
+}
+
+function renderSidebarMain(list) {
+  if (state.personas.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "list-empty";
+    empty.textContent = "Sin personas — subí un .wav";
+    list.appendChild(empty);
+    return;
+  }
+  const byName = new Map(state.personas.map((p) => [p.name, p]));
+  const pinned = byName.get(FOR_INSTRUCT);
+  if (pinned) list.appendChild(personaRow(pinned, false, true));
+  const collapsed = getCollapsedFolders();
+  for (const entry of state.personaLayout) {
+    if (entry.type === "persona") {
+      const p = byName.get(entry.name);
+      if (p) list.appendChild(personaRow(p, true, false));
+    } else {
+      const isCollapsed = !!collapsed[entry.name];
+      list.appendChild(folderRow(entry, isCollapsed));
+      if (!isCollapsed && entry.personas.length) {
+        const kids = document.createElement("div");
+        kids.className = "persona-children";
+        kids.dataset.folder = entry.name;
+        for (const m of entry.personas) {
+          const p = byName.get(m);
+          if (p) kids.appendChild(personaRow(p, true, false));
+        }
+        if (kids.children.length) list.appendChild(kids);
+      }
+    }
+  }
+}
+
+function renderSidebarRoom(list) {
   const vis = visiblePersonas();
   if (vis.length === 0) {
     const empty = document.createElement("div");
     empty.className = "list-empty";
-    empty.textContent =
-      state.personas.length === 0
-        ? "Sin personas — subí un .wav"
-        : "Sin personas en esta room — asígalas desde el ícono de personas de la room";
+    empty.textContent = "Sin personas en esta room — asígalas desde el ícono de personas de la room";
     list.appendChild(empty);
     return;
   }
-  for (const p of vis) {
-    const item = document.createElement("div");
-    item.className = "persona";
-    item.dataset.name = p.name;
+  for (const p of vis) list.appendChild(personaRow(p, false, false));
+}
 
-    const av = avatarEl(p, "avatar");
+function personaRow(p, draggable = false, pinned = false) {
+  const item = document.createElement("div");
+  item.className = "persona" + (pinned ? " pinned" : "");
+  item.dataset.name = p.name;
 
-    const info = document.createElement("div");
-    info.className = "persona-info";
-    const name = document.createElement("div");
-    name.className = "persona-name";
-    name.textContent = p.name;
-    info.appendChild(name);
-    if (p.reference_audio_language) {
-      const lang = document.createElement("div");
-      lang.className = "persona-lang";
-      lang.textContent = p.reference_audio_language;
-      info.appendChild(lang);
-    }
+  const av = avatarEl(p, "avatar");
 
-    const editBtn = document.createElement("button");
-    editBtn.className = "persona-edit";
-    editBtn.title = "Editar persona";
-    editBtn.setAttribute("aria-label", `Editar ${p.name}`);
-    const ei = document.createElement("i");
-    ei.className = "ti ti-pencil";
-    editBtn.appendChild(ei);
-    editBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openPersonaModal(p.name);
-    });
-    item.appendChild(editBtn);
-
-    item.append(av, info);
-    if (p.tts_capable) {
-      const vol = document.createElement("i");
-      vol.className = "ti ti-volume persona-vol";
-      item.appendChild(vol);
-    }
-    item.appendChild(editBtn);
-    // click en la fila NO abre el modal: el acceso de edicion es solo el lapiz
-    list.appendChild(item);
+  const info = document.createElement("div");
+  info.className = "persona-info";
+  const name = document.createElement("div");
+  name.className = "persona-name";
+  name.textContent = p.name;
+  info.appendChild(name);
+  if (p.reference_audio_language) {
+    const lang = document.createElement("div");
+    lang.className = "persona-lang";
+    lang.textContent = p.reference_audio_language;
+    info.appendChild(lang);
   }
+
+  const editBtn = document.createElement("button");
+  editBtn.className = "persona-edit";
+  editBtn.title = "Editar persona";
+  editBtn.setAttribute("aria-label", "Editar " + p.name);
+  const ei = document.createElement("i");
+  ei.className = "ti ti-pencil";
+  editBtn.appendChild(ei);
+  editBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openPersonaModal(p.name);
+  });
+
+  item.append(av, info);
+  if (p.tts_capable) {
+    const vol = document.createElement("i");
+    vol.className = "ti ti-volume persona-vol";
+    item.appendChild(vol);
+  }
+  item.appendChild(editBtn);
+  // click en la fila NO abre el modal: el acceso de edicion es solo el lapiz
+  if (draggable) wireDraggableRow(item, "persona", p.name);
+  return item;
+}
+
+function folderRow(entry, isCollapsed) {
+  const row = document.createElement("div");
+  row.className = "persona-folder";
+  row.dataset.name = entry.name;
+
+  const chev = document.createElement("i");
+  chev.className = "ti " + (isCollapsed ? "ti-chevron-right" : "ti-chevron-down") + " folder-chevron";
+
+  const editing = folderEditing && folderEditing.name === entry.name;
+  if (editing) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "persona-folder-input";
+    input.value = entry.name;
+    input.maxLength = 40;
+    input.spellcheck = false;
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") commitFolderRename(input, entry.name, editing.isNew);
+      else if (e.key === "Escape") cancelFolderEdit(entry.name, editing.isNew);
+    });
+    input.addEventListener("blur", () => {
+      if (folderEditing && folderEditing.name === entry.name) {
+        commitFolderRename(input, entry.name, editing.isNew);
+      }
+    });
+    row.append(chev, input);
+    requestAnimationFrame(() => {
+      input.focus();
+      input.select();
+    });
+  } else {
+    const label = document.createElement("span");
+    label.className = "persona-folder-name";
+    label.textContent = entry.name || "nueva carpeta";
+    row.appendChild(label);
+
+    const renameBtn = document.createElement("button");
+    renameBtn.className = "persona-edit folder-btn";
+    renameBtn.title = "Renombrar carpeta";
+    renameBtn.setAttribute("aria-label", "Renombrar carpeta " + (entry.name || "nueva"));
+    renameBtn.innerHTML = '<i class="ti ti-pencil"></i>';
+    renameBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      folderEditing = { name: entry.name, isNew: false };
+      renderSidebar();
+    });
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "persona-edit folder-btn folder-del";
+    delBtn.title = "Borrar carpeta";
+    delBtn.setAttribute("aria-label", "Borrar carpeta " + (entry.name || "nueva"));
+    delBtn.innerHTML = '<i class="ti ti-trash"></i>';
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteFolder(entry.name);
+    });
+
+    row.append(chev, label, renameBtn, delBtn);
+  }
+
+  row.addEventListener("click", (e) => {
+    if (e.target.closest("button") || e.target.tagName === "INPUT") return;
+    toggleFolder(entry.name);
+  });
+  if (!editing) wireDraggableRow(row, "folder", entry.name);
+  return row;
+}
+
+// ── colapso / CRUD de carpetas ──────────────────────────────────────────
+const COLLAPSE_KEY = "persona-collapsed";
+
+function getCollapsedFolders() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}");
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function toggleFolder(name) {
+  const cur = getCollapsedFolders();
+  cur[name] = !cur[name];
+  try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(cur)); } catch {}
+  renderSidebar();
+}
+
+function createFolder() {
+  if (state.room !== "default" || folderEditing) return;
+  state.personaLayout = layout.addFolder(state.personaLayout, "", 0);
+  folderEditing = { name: "", isNew: true };
+  renderSidebar();
+}
+
+function cancelFolderEdit(name, isNew) {
+  folderEditing = null;
+  if (isNew) {
+    state.personaLayout = state.personaLayout.filter(
+      (e) => !(e.type === "folder" && e.name === name)
+    );
+  }
+  renderSidebar();
+}
+
+function commitFolderRename(input, oldName, isNew) {
+  if (!folderEditing || folderEditing.name !== oldName) return;
+  folderEditing = null;
+  const next = input.value.trim();
+  if (!next) {
+    if (isNew) {
+      state.personaLayout = state.personaLayout.filter(
+        (e) => !(e.type === "folder" && e.name === oldName)
+      );
+    }
+    renderSidebar();
+    return;
+  }
+  try {
+    state.personaLayout = layout.renameFolder(state.personaLayout, oldName, next);
+  } catch {
+    toast("Ya existe una carpeta llamada «" + next + "»", "error");
+    renderSidebar();
+    return;
+  }
+  renderSidebar();
+  saveLayout();
+}
+
+function deleteFolder(name) {
+  const entry = state.personaLayout.find((e) => e.type === "folder" && e.name === name);
+  if (!entry) return;
+  const n = entry.personas.length;
+  if (n > 0 && !window.confirm("¿Borrar la carpeta «" + name + "»? Sus " + n + " personas pasan al listado principal.")) return;
+  state.personaLayout = layout.removeFolder(state.personaLayout, name);
+  renderSidebar();
+  saveLayout();
+}
+
+async function saveLayout() {
+  try {
+    await api("/api/personas/layout", { method: "PUT", body: { layout: state.personaLayout } });
+  } catch (err) {
+    toast("No se pudo guardar el orden de carpetas: " + (err.message || err), "error");
+    await refreshPersonas();
+  }
+}
+
+// filas arrastrables (handlers de drop: Task 5)
+function wireDraggableRow(el, kind, name) {
+  el.draggable = true;
+  el.addEventListener("dragstart", (e) => {
+    dragging = { kind, name };
+    el.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", name);
+  });
+  el.addEventListener("dragend", () => {
+    dragging = null;
+    el.classList.remove("dragging");
+  });
 }
 
 function wireDropZone(dropEl) {
@@ -984,7 +1188,11 @@ function buildCropModal(p, file, img, url, refresh) {
 }
 
 async function refreshPersonas() {
-  state.personas = (await api("/api/personas")).personas || [];
+  const data = await api("/api/personas");
+  state.personas = data.personas || [];
+  state.personaLayout = Array.isArray(data.layout)
+    ? data.layout
+    : layout.normalize(null, state.personas.map((p) => p.name));
   renderSidebar();
   renderWhoChips();
   refreshTtsLanguageOptions();
@@ -1001,6 +1209,7 @@ export async function initPersonas() {
     }
   }
   await refreshPersonas();
+  document.getElementById("btn-new-folder").addEventListener("click", createFolder);
   renderUploadPanel();
 }
 

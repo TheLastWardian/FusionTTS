@@ -12,6 +12,7 @@ function storedRoom() {
 export const state = {
   config: {},
   personas: [],
+  personaLayout: [],
   rooms: [],
   room: storedRoom(),
   who: "router",
