@@ -14,6 +14,7 @@ from app.schemas import (
     Persona,
     PersonaDraftAccept,
     PersonaDraftRegenerate,
+    PersonaLayoutUpdate,
     PersonaRename,
     TranscriptUpdate,
 )
@@ -269,10 +270,14 @@ def _read_transcript(store, rel: str | None) -> str | None:
 
 @router.get("/personas")
 async def list_personas(request: Request) -> dict:
-    personas = _persona_store(request).list()
+    store = _persona_store(request)
+    personas = store.list()
     if not request.app.state.app_state.config.get("show_for_instruct"):
         personas = [p for p in personas if p.get("name") != FOR_INSTRUCT_NAME]
-    return {"personas": [_with_tts_capable(p) for p in personas]}
+    return {
+        "personas": [_with_tts_capable(p) for p in personas],
+        "layout": store.get_layout(),
+    }
 
 
 @router.get("/personas/{name}")
@@ -349,6 +354,15 @@ async def create_persona(request: Request, payload: Persona) -> dict:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/personas/layout")
+async def update_persona_layout(request: Request, payload: PersonaLayoutUpdate) -> dict:
+    try:
+        normalized = _persona_store(request).save_layout(payload.layout)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"layout": normalized}
 
 
 @router.put("/personas/{name}")

@@ -38,6 +38,12 @@ class PersonaRename(BaseModel):
     name: str = Field(min_length=1, pattern=PERSONA_NAME_RE)
 
 
+class PersonaLayoutUpdate(BaseModel):
+    # JsonValue (no `list`): si no es lista, el store lanza ValueError -> 400
+    # (la spec exige 400, no 422, para "layout no es una lista")
+    layout: JsonValue
+
+
 class PersonaDraftAccept(BaseModel):
     name: str = Field(min_length=1, pattern=PERSONA_NAME_RE)
     description: str
