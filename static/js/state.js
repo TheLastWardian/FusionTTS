@@ -13,6 +13,7 @@ export const state = {
   config: {},
   personas: [],
   personaLayout: [],
+  layoutColumns: 2,
   rooms: [],
   room: storedRoom(),
   who: "router",

@@ -130,6 +130,72 @@ export function movePersona(layout, name, target) {
   return out;
 }
 
+// Intercambio de lugares entre dos personas, dondequiera que estén (mismo
+// tope, misma carpeta, carpetas distintas, o tope<->carpeta): cada una toma
+// el lugar exacto de la otra.
+export function swapPersonas(layout, nameA, nameB) {
+  if (nameA === nameB) return layout.slice();
+  const find = (name) => {
+    for (let i = 0; i < layout.length; i++) {
+      const e = layout[i];
+      if (e.type === "persona" && e.name === name) return { top: i };
+      if (e.type === "folder" && e.personas.includes(name)) {
+        return { folder: e.name, index: e.personas.indexOf(name) };
+      }
+    }
+    return null;
+  };
+  const la = find(nameA);
+  const lb = find(nameB);
+  if (!la || !lb) return layout.slice();
+
+  // 1) quitar ambas de donde estén (tope y carpetas)
+  const out = [];
+  for (const e of layout) {
+    if (e.type === "persona") {
+      if (e.name !== nameA && e.name !== nameB) out.push(e);
+      continue;
+    }
+    let m = e.personas;
+    let changed = false;
+    if (m.includes(nameA)) { m = m.filter((x) => x !== nameA); changed = true; }
+    if (m.includes(nameB)) { m = m.filter((x) => x !== nameB); changed = true; }
+    out.push(changed ? { type: "folder", name: e.name, personas: m } : e);
+  }
+
+  // 2) top-level: insertar de atras para adelante (los indices no se desplazan)
+  const tops = [];
+  if (la.top !== undefined) tops.push({ i: la.top, name: nameB });
+  if (lb.top !== undefined) tops.push({ i: lb.top, name: nameA });
+  tops.sort((x, y) => y.i - x.i);
+  for (const t of tops) {
+    const i = Math.max(0, Math.min(t.i, out.length));
+    out.splice(i, 0, { type: "persona", name: t.name });
+  }
+
+  // 3) carpetas: cada una va al slot de la otra. En la misma carpeta el slot
+  // se ajusta por las que se quitaron, y el ORDEN de insercion importa: cuando
+  // los dos slots colapsan en el mismo indice base (adyacentes) hay que
+  // insertar primero la que va al slot de indice original mayor, si no la
+  // segunda se mete antes de la primera y el swap queda en no-op.
+  const sameFolder = la.folder && lb.folder && la.folder === lb.folder;
+  const swaps = [
+    { name: nameA, dest: lb, other: la },
+    { name: nameB, dest: la, other: lb },
+  ].sort((x, y) => (sameFolder ? y.dest.index - x.dest.index : 0));
+  for (const s of swaps) {
+    if (!s.dest.folder) continue; // los slots tope se insertan en el paso 2
+    const idx = out.findIndex((e) => e.type === "folder" && e.name === s.dest.folder);
+    if (idx === -1) continue;
+    const members = out[idx].personas.slice();
+    const shift = sameFolder && s.other.index < s.dest.index ? 1 : 0;
+    const i = Math.max(0, Math.min(s.dest.index - shift, members.length));
+    members.splice(i, 0, s.name);
+    out[idx] = { type: "folder", name: out[idx].name, personas: members };
+  }
+  return out;
+}
+
 export function reorderMembers(layout, folderName, fromIdx, toIdx) {
   return layout.map((e) => {
     if (e.type !== "folder" || e.name !== folderName) return e;

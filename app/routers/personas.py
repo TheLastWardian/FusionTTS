@@ -277,6 +277,7 @@ async def list_personas(request: Request) -> dict:
     return {
         "personas": [_with_tts_capable(p) for p in personas],
         "layout": store.get_layout(),
+        "layout_columns": store.get_layout_columns(),
     }
 
 
@@ -358,11 +359,12 @@ async def create_persona(request: Request, payload: Persona) -> dict:
 
 @router.put("/personas/layout")
 async def update_persona_layout(request: Request, payload: PersonaLayoutUpdate) -> dict:
+    store = _persona_store(request)
     try:
-        normalized = _persona_store(request).save_layout(payload.layout)
+        normalized = store.save_layout(payload.layout, payload.columns)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"layout": normalized}
+    return {"layout": normalized, "layout_columns": store.get_layout_columns()}
 
 
 @router.put("/personas/{name}")

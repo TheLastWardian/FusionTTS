@@ -72,6 +72,24 @@ def test_save_layout_roundtrip(store):
     assert reloaded.get_layout() == layout
 
 
+def test_layout_columns_roundtrip(store):
+    assert store.get_layout_columns() == 2
+    store.save_layout(store.get_layout(), columns=3)
+    assert store.get_layout_columns() == 3
+    reloaded = PersonaStore(personas_yaml=store.yaml_path)
+    assert reloaded.get_layout_columns() == 3
+    # sin columns: no cambia el valor guardado
+    store2 = PersonaStore(personas_yaml=store.yaml_path)
+    store2.save_layout(store2.get_layout())
+    assert PersonaStore(personas_yaml=store.yaml_path).get_layout_columns() == 3
+
+
+@pytest.mark.parametrize("bad", [0, 5, -1, "2", True])
+def test_layout_columns_invalido(store, bad):
+    with pytest.raises(ValueError):
+        store.save_layout(store.get_layout(), columns=bad)
+
+
 def test_for_instruct_fuera_del_layout(store):
     store.create(make_persona(FOR_INSTRUCT_NAME))
     saved = store.save_layout([
@@ -192,6 +210,7 @@ def test_get_personas_incluye_layout(client):
     body = client.get("/api/personas").json()
     # solo existe For Instruct (lifespan) y queda fuera del layout
     assert body["layout"] == []
+    assert body["layout_columns"] == 2
 
 
 def test_put_layout_roundtrip(client):
@@ -203,8 +222,21 @@ def test_put_layout_roundtrip(client):
     ]
     r = client.put("/api/personas/layout", json={"layout": layout})
     assert r.status_code == 200
-    assert r.json() == {"layout": layout}
+    assert r.json() == {"layout": layout, "layout_columns": 2}
     assert client.get("/api/personas").json()["layout"] == layout
+
+
+def test_put_layout_columns(client):
+    client.post("/api/personas", json=make_persona("Jean"))
+    r = client.put("/api/personas/layout", json={"layout": [], "columns": 4})
+    assert r.status_code == 200
+    assert r.json()["layout_columns"] == 4
+    assert client.get("/api/personas").json()["layout_columns"] == 4
+
+
+def test_put_layout_columns_invalido_422(client):
+    r = client.put("/api/personas/layout", json={"layout": [], "columns": 9})
+    assert r.status_code == 422
 
 
 def test_put_layout_no_sombra_de_put_personas_name(client):

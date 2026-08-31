@@ -1,6 +1,6 @@
 // personas.js — sidebar de personas, who-chips, upload de .wav en 2 fases (draft → aceptar/rechazar) y editor de persona.
 import { state } from "./state.js";
-import { api, avatarCss, initials, avatarEl, toast } from "./utils.js";
+import { api, avatarCss, initials, avatarEl, avatarUrl, toast } from "./utils.js";
 import { refreshTtsLanguageOptions } from "./settings.js";
 import * as layout from "./persona-layout.js";
 
@@ -91,26 +91,73 @@ function renderSidebarRoom(list) {
 
 function personaRow(p, draggable = false, pinned = false) {
   const item = document.createElement("div");
-  item.className = "persona" + (pinned ? " pinned" : "");
   item.dataset.name = p.name;
 
-  const av = avatarEl(p, "avatar");
-
   const info = document.createElement("div");
-  info.className = "persona-info";
+  if (pinned) {
+    // persona-sistema: fila compacta, no card (no participa del grid)
+    item.className = "persona pinned";
+    info.className = "persona-info";
+    const name = document.createElement("div");
+    name.className = "persona-name";
+    name.textContent = p.name;
+    info.appendChild(name);
+    if (p.reference_audio_language) {
+      const lang = document.createElement("div");
+      lang.className = "persona-lang";
+      lang.textContent = p.reference_audio_language;
+      info.appendChild(lang);
+    }
+    item.append(avatarEl(p, "avatar"), info);
+    return item;
+  }
+
+  item.className = "persona persona-card";
+  // imagen grande: cover de avatar_image, o radial gradient + iniciales
+  const image = document.createElement("div");
+  image.className = "pc-image";
+  if (p.avatar_image) {
+    const img = document.createElement("img");
+    img.alt = p.name;
+    img.src = avatarUrl(p.name);
+    img.draggable = false;
+    image.appendChild(img);
+  } else {
+    const color = /^#[0-9a-fA-F]{6}$/.test(p.avatar_color || "") ? p.avatar_color : "#5b8ef0";
+    image.style.background = "radial-gradient(circle at 50% 35%, " + color + " 0%, #101016 100%)";
+    const init = document.createElement("div");
+    init.className = "pc-initials";
+    const sp = document.createElement("span");
+    sp.textContent = initials(p.name);
+    init.appendChild(sp);
+    image.appendChild(init);
+  }
+
+  info.className = "pc-info";
   const name = document.createElement("div");
-  name.className = "persona-name";
+  name.className = "pc-name";
   name.textContent = p.name;
   info.appendChild(name);
   if (p.reference_audio_language) {
     const lang = document.createElement("div");
-    lang.className = "persona-lang";
+    lang.className = "pc-lang";
     lang.textContent = p.reference_audio_language;
     info.appendChild(lang);
   }
+  const body = document.createElement("div");
+  body.className = "pc-body";
+  body.appendChild(info);
 
+  const actions = document.createElement("div");
+  actions.className = "pc-actions";
+  if (p.tts_capable) {
+    const vol = document.createElement("i");
+    vol.className = "ti ti-volume pc-vol";
+    vol.title = "Con voz TTS";
+    actions.appendChild(vol);
+  }
   const editBtn = document.createElement("button");
-  editBtn.className = "persona-edit";
+  editBtn.className = "pc-btn";
   editBtn.title = "Editar persona";
   editBtn.setAttribute("aria-label", "Editar " + p.name);
   const ei = document.createElement("i");
@@ -120,15 +167,11 @@ function personaRow(p, draggable = false, pinned = false) {
     e.stopPropagation();
     openPersonaModal(p.name);
   });
+  actions.appendChild(editBtn);
+  body.appendChild(actions);
 
-  item.append(av, info);
-  if (p.tts_capable) {
-    const vol = document.createElement("i");
-    vol.className = "ti ti-volume persona-vol";
-    item.appendChild(vol);
-  }
-  item.appendChild(editBtn);
-  // click en la fila NO abre el modal: el acceso de edicion es solo el lapiz
+  item.append(image, body);
+  // click en la card NO abre el modal: el acceso de edicion es solo el lapiz
   if (draggable) wireDraggableRow(item, "persona", p.name);
   return item;
 }
@@ -273,108 +316,303 @@ function deleteFolder(name) {
 
 async function saveLayout() {
   try {
-    await api("/api/personas/layout", { method: "PUT", body: { layout: state.personaLayout } });
+    await api("/api/personas/layout", {
+      method: "PUT",
+      body: { layout: state.personaLayout, columns: state.layoutColumns },
+    });
   } catch (err) {
     toast("No se pudo guardar el orden de carpetas: " + (err.message || err), "error");
     await refreshPersonas();
   }
 }
 
+// toggle global de columnas: clase en body (CSS grilla) + persistencia
+function applyColumns() {
+  const n = Math.max(1, Math.min(4, Number(state.layoutColumns) || 2));
+  state.layoutColumns = n;
+  document.body.classList.remove("cols-1", "cols-2", "cols-3", "cols-4");
+  document.body.classList.add("cols-" + n);
+  document.querySelectorAll("#col-toggle button").forEach((b) =>
+    b.classList.toggle("active", Number(b.dataset.cols) === n)
+  );
+}
+
+function initColToggle() {
+  document.querySelectorAll("#col-toggle button").forEach((b) =>
+    b.addEventListener("click", () => {
+      state.layoutColumns = Number(b.dataset.cols);
+      applyColumns();
+      saveLayout();
+    })
+  );
+}
+
 // ── drag & drop del layout (solo Main) ──────────────────────────────────
-let dropLineEl = null;
+let dropSlotEl = null;
+let dropSlotTarget = null; // target que produjo el slot actual
 let dropFolderEl = null;
+let hoverEl = null; // card/bloque bajo el cursor en el ultimo dragover
+let dragOverEl = null; // elemento que actualmente tiene la clase .drag-over
+let lastLoggedTarget = "__init__"; // firma del ultimo target logueado (anti-spam)
+
+// [dnd] log del layout: posicion de cada entrada (tope y dentro de carpetas)
+function describeLayout(l) {
+  return l
+    .map((e, i) =>
+      e.type === "folder"
+        ? `[${i}] Carpeta "${e.name}" [${e.personas.join(", ")}]`
+        : `[${i}] ${e.name}`
+    )
+    .join(" | ");
+}
 
 function topLevelRows() {
   const list = document.getElementById("persona-list");
-  return [...list.querySelectorAll(":scope > .persona:not(.pinned), :scope > .persona-folder")];
+  return [...list.querySelectorAll(":scope > .persona-card, :scope > .persona-folder")];
+}
+
+function isInFolder(name, folder) {
+  const e = state.personaLayout.find((x) => x.type === "folder" && x.name === folder);
+  return !!e && e.personas.includes(name);
+}
+
+function isTopLevel(name) {
+  return state.personaLayout.some((x) => x.type === "persona" && x.name === name);
+}
+
+// 0 = "antes", 1 = "despues". En grid multicolonna decide por el eje
+// dominante del cursor respecto al centro de la card: movimientos
+// horizontales caen por X (mitad izq/der), verticales por Y (arriba/abajo).
+// El viejo midpoint solo por Y daba coin-flip en movimientos horizontales.
+function sideOf(rect, e) {
+  if ((Number(state.layoutColumns) || 2) === 1 || !rect.width || !rect.height) {
+    return e.clientY < rect.top + rect.height / 2 ? 0 : 1;
+  }
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = Math.abs(e.clientX - cx) / (rect.width / 2);
+  const dy = Math.abs(e.clientY - cy) / (rect.height / 2);
+  if (dx >= dy) return e.clientX < cx ? 0 : 1;
+  return e.clientY < cy ? 0 : 1;
+}
+
+// la fila mas cercana al cursor (por distancia al centro de cada rect)
+function nearestRow(rows, e) {
+  let best = null;
+  let bestD = Infinity;
+  for (const r of rows) {
+    const rc = r.getBoundingClientRect();
+    const d = Math.hypot(
+      e.clientX - (rc.left + rc.width / 2),
+      e.clientY - (rc.top + rc.height / 2)
+    );
+    if (d < bestD) { bestD = d; best = { el: r, rect: rc }; }
+  }
+  return best;
 }
 
 // target: {index} (tope) o {folder, index?} (dentro de carpeta).
-// Indices = posiciones en filas renderizadas, INCLUYENDO la fila arrastrada
+// Indices = posiciones en filas renderizadas, INCLUYENDO la card arrastrada
 // (las funciones puras ajustan internamente).
 function dropTargetAt(e) {
+  hoverEl = null;
   if (!dragging || state.room !== "default") return null;
   const list = document.getElementById("persona-list");
+
+  // el slot no aparece en elementFromPoint (pointer-events:none): si el cursor
+  // esta sobre su celda, mantener el target actual. Re-computar aca cambiaba
+  // el target (el slot oculta la card que empujo) y el reflow entraba en loop.
+  if (dropSlotEl && dropSlotTarget) {
+    const r = dropSlotEl.getBoundingClientRect();
+    if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+      return dropSlotTarget;
+    }
+  }
+
   const at = document.elementFromPoint(e.clientX, e.clientY);
   if (!at || !at.closest || !list.contains(at)) return null;
 
   // sobre un miembro de carpeta
-  const memberRow = at.closest(".persona-children > .persona");
+  const memberRow = at.closest(".persona-children > .persona-card");
   if (memberRow && memberRow.dataset.name) {
+    if (memberRow.dataset.name === dragging.name) return null; // propia card: no-op
+    hoverEl = memberRow;
     const kids = memberRow.parentElement;
     if (dragging.kind === "persona") {
-      const rows = [...kids.querySelectorAll(":scope > .persona")];
-      const i = rows.indexOf(memberRow);
-      const rect = memberRow.getBoundingClientRect();
-      return {
-        folder: kids.dataset.folder,
-        index: e.clientY < (rect.top + rect.bottom) / 2 ? i : i + 1,
-      };
+      if (isInFolder(dragging.name, kids.dataset.folder)) {
+        // misma carpeta: SWAP (intercambian de lugar)
+        return { folder: kids.dataset.folder, swap: memberRow.dataset.name };
+      }
+      // viniendo de afuera (tope u otra carpeta): INSERTAR en la posicion de
+      // la card pasada (la card se correa; nadie sale de la carpeta)
+      const rows = [...kids.querySelectorAll(":scope > .persona-card")];
+      return { folder: kids.dataset.folder, index: rows.indexOf(memberRow) };
     }
     // carpeta sobre bloque de otra carpeta: gap antes/despues del bloque
     const rows = topLevelRows();
     const fi = rows.findIndex((r) => r.classList.contains("persona-folder") && r.dataset.name === kids.dataset.folder);
     const rect = kids.getBoundingClientRect();
-    return { index: e.clientY < rect.top + (rect.height) / 2 ? fi : fi + 1 };
+    return { index: fi + sideOf(rect, e) };
   }
 
   // sobre la header de una carpeta
   const folderEl = at.closest(".persona-folder");
   if (folderEl && folderEl.dataset.name !== undefined) {
     if (dragging.kind === "persona") return { folder: folderEl.dataset.name };
+    if (folderEl.dataset.name === dragging.name) return null; // propia carpeta: no-op
+    hoverEl = folderEl;
     const rows = topLevelRows();
-    const i = rows.indexOf(folderEl);
-    const rect = folderEl.getBoundingClientRect();
-    return { index: e.clientY < (rect.top + rect.bottom) / 2 ? i : i + 1 };
+    return { index: rows.indexOf(folderEl) }; // antes de esa carpeta
   }
 
-  // sobre una persona suelta
-  const personaEl = at.closest(".persona:not(.pinned)");
+  // sobre una card suelta: SWAP si la arrastrada tambien esta en el tope;
+  // INSERT si viene saliendo de una carpeta
+  const personaEl = at.closest(".persona-card");
   if (personaEl && personaEl.dataset.name && !personaEl.closest(".persona-children")) {
+    if (personaEl.dataset.name === dragging.name) return null; // propia card (fantasma)
+    hoverEl = personaEl;
+    if (isTopLevel(dragging.name)) return { swap: personaEl.dataset.name };
     const rows = topLevelRows();
     const i = rows.indexOf(personaEl);
-    if (i !== -1) {
-      const rect = personaEl.getBoundingClientRect();
-      return { index: e.clientY < (rect.top + rect.bottom) / 2 ? i : i + 1 };
-    }
+    if (i !== -1) return { index: i };
   }
 
+  // gap o margen (contenedor, no card): resolver a la fila mas cercana.
+  // El viejo fallback al final del tope teletransportaba el preview y el
+  // drop arrancaba la persona de la carpeta cuando el cursor caia en un gap.
+  if (dragging.kind === "persona") {
+    let kidsEl = at.closest(".persona-children");
+    if (!kidsEl) {
+      // margen junto a un bloque de hijos: el cursor "pertenence" a esa carpeta
+      for (const k of list.querySelectorAll(":scope > .persona-children")) {
+        const r = k.getBoundingClientRect();
+        if (e.clientX >= r.left - 6 && e.clientX <= r.right + 6 &&
+            e.clientY >= r.top - 4 && e.clientY <= r.bottom + 4) { kidsEl = k; break; }
+      }
+    }
+    if (kidsEl) {
+      const rows = [...kidsEl.querySelectorAll(":scope > .persona-card")];
+      const near = nearestRow(rows, e);
+      if (!near) return null;
+      if (near.el.dataset.name === dragging.name) return null;
+      hoverEl = near.el;
+      return { folder: kidsEl.dataset.folder, index: rows.indexOf(near.el) + sideOf(near.rect, e) };
+    }
+  }
+  const rows = topLevelRows();
+  const near = nearestRow(rows, e);
+  if (near) {
+    if (near.el.dataset.name === dragging.name) return null;
+    hoverEl = near.el;
+    return { index: rows.indexOf(near.el) + sideOf(near.rect, e) };
+  }
   return { index: state.personaLayout.length };
 }
 
 function clearDropIndicator() {
-  if (dropLineEl) { dropLineEl.remove(); dropLineEl = null; }
+  if (dropSlotEl) { dropSlotEl.remove(); dropSlotEl = null; }
+  dropSlotTarget = null;
   if (dropFolderEl) { dropFolderEl.classList.remove("drop-target"); dropFolderEl = null; }
+  if (dragOverEl) { dragOverEl.classList.remove("drag-over"); dragOverEl = null; }
 }
 
 function showDropIndicator(target) {
+  // target igual al actual: no tocar el DOM. Re-insertar el slot provoca
+  // reflow; el reflow mueve las cards, el re-compute da otro target, y asi
+  // el slot parpadeaba de un lado a otro sin parar.
+  if (target && dropSlotTarget && JSON.stringify(target) === JSON.stringify(dropSlotTarget)) {
+    if (dragOverEl && dragOverEl !== hoverEl) dragOverEl.classList.remove("drag-over");
+    if (hoverEl) hoverEl.classList.add("drag-over");
+    dragOverEl = hoverEl;
+    return;
+  }
   clearDropIndicator();
   if (!target) return;
+  if (target.swap) {
+    // swap: sin slot (la card destino se mueve al lugar de la arrastrada, no
+    // hay hueco que previsualizar): solo se resalta la card destino
+    dropSlotTarget = target;
+    if (hoverEl) hoverEl.classList.add("drag-over");
+    dragOverEl = hoverEl;
+    return;
+  }
+  // target no-op (resuelve en la posicion actual): sin slot. Mostrar el slot
+  // en la celda destino engana: el drop no mueve nada.
+  if (dragging.kind === "persona") {
+    const preview = layout.movePersona(state.personaLayout, dragging.name, target);
+    if (JSON.stringify(preview) === JSON.stringify(state.personaLayout)) return;
+  } else {
+    const from = state.personaLayout.findIndex((x) => x.type === "folder" && x.name === dragging.name);
+    if (from === -1) return;
+    const preview = layout.moveEntry(state.personaLayout, from, target.index);
+    if (JSON.stringify(preview) === JSON.stringify(state.personaLayout)) return;
+  }
   const list = document.getElementById("persona-list");
   if (target.folder && target.index == null) {
+    // persona sobre header de carpeta: se agrega a esa carpeta
     const el = list.querySelector('.persona-folder[data-name="' + CSS.escape(target.folder) + '"]');
     if (el) { el.classList.add("drop-target"); dropFolderEl = el; }
     return;
   }
-  const line = document.createElement("div");
-  line.className = "drop-line";
-  const listRect = list.getBoundingClientRect();
+  // slot donde quedara: overlay absoluto sobre la celda destino exacta. No es
+  // un item del grid: las cards no se mueven, la geometria bajo el cursor se
+  // mantiene estable y no hay reflow (el reflow era lo que hacia saltar el
+  // target en loop).
+  let grid;
   let rows;
-  let i;
   if (target.folder) {
-    const kids = list.querySelector('.persona-children[data-folder="' + CSS.escape(target.folder) + '"]');
-    rows = kids ? [...kids.querySelectorAll(":scope > .persona")] : [];
-    i = Math.max(0, Math.min(target.index, rows.length));
+    grid = list.querySelector('.persona-children[data-folder="' + CSS.escape(target.folder) + '"]');
+    if (!grid) return;
+    rows = [...grid.querySelectorAll(":scope > .persona-card")];
   } else {
+    grid = list;
+    // mismo espacio de indices que el target: tope completo (cards + carpetas)
     rows = topLevelRows();
-    i = Math.max(0, Math.min(target.index, rows.length));
   }
-  const y = i >= rows.length
-    ? (rows.length ? rows[rows.length - 1].getBoundingClientRect().bottom : listRect.top)
-    : rows[i].getBoundingClientRect().top;
-  line.style.top = Math.max(0, y - listRect.top - list.scrollTop - 1) + "px";
-  list.appendChild(line);
-  dropLineEl = line;
+  const draggedEl = rows.find((r) => r.dataset.name === dragging.name) || null;
+  const i = Math.max(0, Math.min(target.index, rows.length));
+  const oldIndex = draggedEl ? rows.indexOf(draggedEl) : -1;
+  const adj = i > oldIndex ? i - 1 : i;
+  const rowsExcl = rows.filter((r) => r !== draggedEl);
+  const cellEl = rowsExcl[adj] || null;
+
+  const slot = document.createElement("div");
+  slot.className = "drop-slot" + (dragging.kind === "folder" ? " wide" : "");
+  slot.style.position = "absolute";
+  const lr = list.getBoundingClientRect();
+  if (cellEl) {
+    const r = cellEl.getBoundingClientRect();
+    slot.style.left = (r.left - lr.left) + "px";
+    slot.style.top = (r.top - lr.top + list.scrollTop) + "px";
+    slot.style.width = r.width + "px";
+    slot.style.height = r.height + "px";
+  } else {
+    // final: debajo del ultimo item del grid destino (en el tope el ultimo
+    // item puede ser el bloque de hijos de la ultima carpeta)
+    const items = [...grid.children].filter(
+      (c) => c !== slot &&
+        (c.classList.contains("persona-card") ||
+         c.classList.contains("persona-folder") ||
+         c.classList.contains("persona-children"))
+    );
+    const last = items[items.length - 1];
+    if (!last) return;
+    const r = last.getBoundingClientRect();
+    const cardRef = dragging.kind === "folder"
+      ? null
+      : rowsExcl.find((x) => x.classList.contains("persona-card")) ||
+        list.querySelector(".persona-card") || last;
+    const h = dragging.kind === "folder" ? 36 : cardRef.offsetHeight;
+    slot.style.left = (r.left - lr.left) + "px";
+    slot.style.top = (r.bottom - lr.top + list.scrollTop + 8) + "px";
+    slot.style.width = r.width + "px";
+    slot.style.height = h + "px";
+  }
+  list.appendChild(slot);
+  dropSlotEl = slot;
+  dropSlotTarget = target;
+  if (hoverEl) hoverEl.classList.add("drag-over");
+  dragOverEl = hoverEl;
 }
 
 function applyDrop(target) {
@@ -382,7 +620,9 @@ function applyDrop(target) {
   const was = dragging;
   let next;
   if (was.kind === "persona") {
-    next = layout.movePersona(state.personaLayout, was.name, target);
+    next = target.swap
+      ? layout.swapPersonas(state.personaLayout, was.name, target.swap)
+      : layout.movePersona(state.personaLayout, was.name, target);
   } else {
     const from = state.personaLayout.findIndex((e) => e.type === "folder" && e.name === was.name);
     if (from === -1) return;
@@ -402,7 +642,15 @@ function initLayoutDnd() {
     if (!dragging || state.room !== "default") return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    showDropIndicator(dropTargetAt(e));
+    const target = dropTargetAt(e);
+    const sig = target ? JSON.stringify(target) : "null";
+    if (sig !== lastLoggedTarget) {
+      lastLoggedTarget = sig;
+      console.log(
+        `[dnd] dragover target=${sig} @ (${Math.round(e.clientX)},${Math.round(e.clientY)})`
+      );
+    }
+    showDropIndicator(target);
   });
   list.addEventListener("dragleave", (e) => {
     if (!list.contains(e.relatedTarget)) clearDropIndicator();
@@ -410,9 +658,24 @@ function initLayoutDnd() {
   list.addEventListener("drop", (e) => {
     if (!dragging || state.room !== "default") return;
     e.preventDefault();
-    const target = dropTargetAt(e);
+    // el drop cae donde quedo el ultimo preview (slot o card resaltada por
+    // swap): re-computar aca veria el slot en el DOM (elementFromPoint lo
+    // salta) y daria un target distinto al que se vio
+    const fromPreview = !!dropSlotTarget;
+    const target = dropSlotTarget || dropTargetAt(e);
+    console.log(
+      `[dnd] drop target=${target ? JSON.stringify(target) : "null"} ` +
+      `(${fromPreview ? "preview" : "re-computado"}) @ (${Math.round(e.clientX)},${Math.round(e.clientY)})`
+    );
+    console.log("[dnd] ANTES: " + describeLayout(state.personaLayout));
+    const before = JSON.stringify(state.personaLayout);
     clearDropIndicator();
     applyDrop(target);
+    const changed = JSON.stringify(state.personaLayout) !== before;
+    console.log(
+      "[dnd] DESPUES: " + describeLayout(state.personaLayout) +
+      (changed ? "" : "  <- SIN CAMBIO (no-op)")
+    );
   });
 }
 
@@ -421,13 +684,19 @@ function wireDraggableRow(el, kind, name) {
   el.draggable = true;
   el.addEventListener("dragstart", (e) => {
     dragging = { kind, name };
+    lastLoggedTarget = "__init__";
     el.classList.add("dragging");
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", name);
+    console.log(`[dnd] dragstart kind=${kind} name="${name}"`);
+    console.log("[dnd] layout inicial: " + describeLayout(state.personaLayout));
   });
   el.addEventListener("dragend", () => {
+    const cancelled = !!dragging;
     dragging = null;
     el.classList.remove("dragging");
+    clearDropIndicator(); // drag cancelado (fuera del list / Esc): sin restos
+    if (cancelled) console.log("[dnd] dragend SIN drop (cancelado)");
   });
 }
 
@@ -1125,12 +1394,15 @@ async function deletePersona(p, btn) {
 }
 
 // ---------- recorte de foto (canvas, sin dependencias) ----------
-// flow: elegir/dropear imagen -> modal con viewport circular (zoom con rueda,
-// pan arrastrando) -> "Aplicar" renderiza 512x512 a PNG y sube al endpoint de
-// avatar. El downscale al exportar tambien resuelve el peso del archivo.
+// flow: elegir/dropear imagen -> modal con viewport en forma de card (zoom con
+// rueda, pan arrastrando) -> "Aplicar" renderiza 512x461 (ratio 100:90, igual
+// que .persona-card) a PNG y sube al endpoint de avatar. El preview es 1:1 con
+// lo que mostrara la card; los avatares redondos hacen cover al centro.
 
-const CROP_SIZE = 280; // viewport en px CSS
-const CROP_OUT = 512; // lado del canvas de salida
+const CROP_W = 280; // viewport en px CSS
+const CROP_H = 252; // 280 * 90 / 100
+const CROP_OUT_W = 512; // canvas de salida
+const CROP_OUT_H = 461; // 512 * 252 / 280
 const CROP_MAX_ZOOM = 4;
 
 function uploadAvatarFile(p, data, filename, refresh, onDone) {
@@ -1178,8 +1450,8 @@ function openCropModal(p, file, refresh) {
 function buildCropModal(p, file, img, url, refresh) {
   const nw = img.naturalWidth;
   const nh = img.naturalHeight;
-  // escala base: la imagen "cover" el viewport con zoom 1
-  const base = Math.max(CROP_SIZE / nw, CROP_SIZE / nh);
+  // escala base: la imagen "cover" el viewport (rectangular) con zoom 1
+  const base = Math.max(CROP_W / nw, CROP_H / nh);
   let zoom = 1;
   let px = 0;
   let py = 0;
@@ -1236,8 +1508,8 @@ function buildCropModal(p, file, img, url, refresh) {
 
   const applyTransform = () => {
     const scale = base * zoom;
-    const maxX = Math.max(0, (nw * scale - CROP_SIZE) / 2);
-    const maxY = Math.max(0, (nh * scale - CROP_SIZE) / 2);
+    const maxX = Math.max(0, (nw * scale - CROP_W) / 2);
+    const maxY = Math.max(0, (nh * scale - CROP_H) / 2);
     px = Math.min(maxX, Math.max(-maxX, px));
     py = Math.min(maxY, Math.max(-maxY, py));
     img.style.transform = `translate(${px}px, ${py}px) scale(${scale})`;
@@ -1296,16 +1568,17 @@ function buildCropModal(p, file, img, url, refresh) {
     apply.disabled = true;
     cancel.disabled = true;
     apply.textContent = "Aplicando…";
-    // el viewport [0,CROP_SIZE] se mapea a [0,CROP_OUT]; la imagen vista es
-    // scale * (punto - centro) + (px,py) respecto al centro del viewport
-    const k = CROP_OUT / CROP_SIZE;
+    // el viewport [0,CROP_W]x[0,CROP_H] se mapea a [0,CROP_OUT_W]x[0,CROP_OUT_H];
+    // la imagen vista es scale * (punto - centro) + (px,py) respecto al centro
+    const kx = CROP_OUT_W / CROP_W;
+    const ky = CROP_OUT_H / CROP_H;
     const scale = base * zoom;
     const canvas = document.createElement("canvas");
-    canvas.width = CROP_OUT;
-    canvas.height = CROP_OUT;
+    canvas.width = CROP_OUT_W;
+    canvas.height = CROP_OUT_H;
     const ctx = canvas.getContext("2d");
-    ctx.translate(CROP_OUT / 2 + k * px, CROP_OUT / 2 + k * py);
-    ctx.scale(k * scale, k * scale);
+    ctx.translate(CROP_OUT_W / 2 + kx * px, CROP_OUT_H / 2 + ky * py);
+    ctx.scale(kx * scale, ky * scale);
     ctx.drawImage(img, -nw / 2, -nh / 2);
     canvas.toBlob(
       (blob) => {
@@ -1329,6 +1602,8 @@ async function refreshPersonas() {
   state.personaLayout = Array.isArray(data.layout)
     ? data.layout
     : layout.normalize(null, state.personas.map((p) => p.name));
+  state.layoutColumns = Number(data.layout_columns) || 2;
+  applyColumns();
   renderSidebar();
   renderWhoChips();
   refreshTtsLanguageOptions();
@@ -1346,6 +1621,7 @@ export async function initPersonas() {
   }
   await refreshPersonas();
   document.getElementById("btn-new-folder").addEventListener("click", createFolder);
+  initColToggle();
   initLayoutDnd();
   renderUploadPanel();
 }

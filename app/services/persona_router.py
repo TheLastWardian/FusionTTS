@@ -149,7 +149,7 @@ async def pick_personas(
     try:
         result = await llm.chat(
             build_router_prompt(user_message, eligible, personas, config, history),
-            max_tokens=1024,
+            max_tokens=4096,
         )
         chosen = parse_router_response(result, eligible, max_count)
         if chosen is not None:

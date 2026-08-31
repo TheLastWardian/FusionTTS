@@ -42,6 +42,8 @@ class PersonaLayoutUpdate(BaseModel):
     # JsonValue (no `list`): si no es lista, el store lanza ValueError -> 400
     # (la spec exige 400, no 422, para "layout no es una lista")
     layout: JsonValue
+    # columnas del grid de personas (1-4); None = no cambiar
+    columns: int | None = Field(default=None, ge=1, le=4)
 
 
 class PersonaDraftAccept(BaseModel):

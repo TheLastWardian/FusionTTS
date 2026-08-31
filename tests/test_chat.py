@@ -233,8 +233,8 @@ def test_router_uses_llm_with_hints(client, mock_llm):
     assert "NADIE" in system_prompt
     assert "One persona name per line" in system_prompt
     assert calls[0]["messages"][1] == {"role": "user", "content": "Who should respond?"}
-    # 1024: el modelo thinking puede gastar tokens en razonar antes del nombre
-    assert calls[0]["max_tokens"] == 1024
+    # 4096: el modelo thinking puede gastar tokens en razonar antes del nombre
+    assert calls[0]["max_tokens"] == 4096
 
 
 def test_router_picks_multiple_in_order(client, mock_llm):

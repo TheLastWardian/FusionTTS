@@ -70,6 +70,7 @@ class PersonaStore:
         self.rooms: RoomConfigStore | None = rooms
         self._personas: list[dict] = []
         self._layout: list[dict] | None = None
+        self._layout_columns: int = 2
         self._lock = threading.Lock()
         self._load()
 
@@ -92,6 +93,9 @@ class PersonaStore:
             if isinstance(raw, dict):
                 layout_raw = raw.get("layout")
                 self._layout = layout_raw if isinstance(layout_raw, list) else None
+                cols = raw.get("layout_columns")
+                if isinstance(cols, int) and not isinstance(cols, bool) and 1 <= cols <= 4:
+                    self._layout_columns = cols
 
     @staticmethod
     def _normalize(persona: dict) -> dict:
@@ -107,6 +111,7 @@ class PersonaStore:
         payload = {"personas": self._personas}
         if self._layout is not None:
             payload["layout"] = self._layout
+        payload["layout_columns"] = self._layout_columns
         payload = yaml.safe_dump(
             payload,
             sort_keys=False,
@@ -197,12 +202,21 @@ class PersonaStore:
         with self._lock:
             return self._normalize_layout(self._layout)
 
-    def save_layout(self, layout: list) -> list[dict]:
+    def save_layout(self, layout: list, columns: int | None = None) -> list[dict]:
         validated = self._validate_layout(layout)
+        if columns is not None:
+            if not isinstance(columns, int) or isinstance(columns, bool) or not 1 <= columns <= 4:
+                raise ValueError("columns debe ser un entero entre 1 y 4")
         with self._lock:
+            if columns is not None:
+                self._layout_columns = columns
             self._layout = self._normalize_layout(validated)
             self._persist_locked()
             return [dict(entry) for entry in self._layout]
+
+    def get_layout_columns(self) -> int:
+        with self._lock:
+            return self._layout_columns
 
     def _normalize_layout(self, raw: list | None) -> list[dict]:
         """Reglas de la spec v2: desconocidos fuera, duplicados ganan la
