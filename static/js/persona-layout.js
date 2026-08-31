@@ -195,13 +195,3 @@ export function swapPersonas(layout, nameA, nameB) {
   }
   return out;
 }
-
-export function reorderMembers(layout, folderName, fromIdx, toIdx) {
-  return layout.map((e) => {
-    if (e.type !== "folder" || e.name !== folderName) return e;
-    const members = e.personas.slice();
-    const m = members.splice(fromIdx, 1)[0];
-    members.splice(toIdx, 0, m);
-    return { type: "folder", name: folderName, personas: members };
-  });
-}

@@ -419,9 +419,9 @@ function dropTargetAt(e) {
   if (!dragging || state.room !== "default") return null;
   const list = document.getElementById("persona-list");
 
-  // el slot no aparece en elementFromPoint (pointer-events:none): si el cursor
-  // esta sobre su celda, mantener el target actual. Re-computar aca cambiaba
-  // el target (el slot oculta la card que empujo) y el reflow entraba en loop.
+  // si el cursor esta sobre la celda del slot (overlay, pointer-events:none),
+  // mantener el target actual en vez de re-computar: la card que hay debajo
+  // del slot es la card destino, y re-computar solo agregaria inestabilidad.
   if (dropSlotEl && dropSlotTarget) {
     const r = dropSlotEl.getBoundingClientRect();
     if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
@@ -517,9 +517,8 @@ function clearDropIndicator() {
 }
 
 function showDropIndicator(target) {
-  // target igual al actual: no tocar el DOM. Re-insertar el slot provoca
-  // reflow; el reflow mueve las cards, el re-compute da otro target, y asi
-  // el slot parpadeaba de un lado a otro sin parar.
+  // target igual al actual: no re-crear el slot ni re-tocar clases
+  // (el slot es overlay, no mueve cards; esto solo evita churn innecesario)
   if (target && dropSlotTarget && JSON.stringify(target) === JSON.stringify(dropSlotTarget)) {
     if (dragOverEl && dragOverEl !== hoverEl) dragOverEl.classList.remove("drag-over");
     if (hoverEl) hoverEl.classList.add("drag-over");
@@ -577,8 +576,7 @@ function showDropIndicator(target) {
   const cellEl = rowsExcl[adj] || null;
 
   const slot = document.createElement("div");
-  slot.className = "drop-slot" + (dragging.kind === "folder" ? " wide" : "");
-  slot.style.position = "absolute";
+  slot.className = "drop-slot";
   const lr = list.getBoundingClientRect();
   if (cellEl) {
     const r = cellEl.getBoundingClientRect();
@@ -679,7 +677,7 @@ function initLayoutDnd() {
   });
 }
 
-// filas arrastrables (handlers de drop: Task 5)
+// filas arrastrables (cards y headers de carpeta)
 function wireDraggableRow(el, kind, name) {
   el.draggable = true;
   el.addEventListener("dragstart", (e) => {

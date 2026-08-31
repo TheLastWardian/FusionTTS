@@ -393,8 +393,7 @@ body.cols-4 .persona-list, body.cols-4 .persona-children { grid-template-columns
 .persona-folder.drag-over { border-color: var(--warning); box-shadow: 0 0 0 2px var(--warning-bg); }
 /* slot donde quedara la card: se inserta en el grid destino en la posicion
    final exacta (las cards reales se abren para dejar el hueco visible) */
-.drop-slot { border: 1.5px dashed var(--accent); background: var(--accent-bg); border-radius: var(--radius-lg); opacity: .8; pointer-events: none; }
-.drop-slot.wide { grid-column: 1 / -1; height: 36px; }
+.drop-slot { position: absolute; border: 1.5px dashed var(--accent); background: var(--accent-bg); border-radius: var(--radius-lg); opacity: .8; pointer-events: none; }
 .persona-folder.drop-target { border-color: var(--accent); background: var(--accent-bg); }
 
 .rooms-section {
