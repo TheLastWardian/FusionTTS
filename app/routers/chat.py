@@ -3,7 +3,7 @@ import base64
 import binascii
 import json
 import logging
-import random
+
 import re
 import uuid
 from typing import AsyncIterator
@@ -17,7 +17,7 @@ from app.schemas import ChatRequest
 from app.services import vision
 from app.services.chat_context import build_llm_messages, build_system_prompt
 from app.services.llm import LLMError
-from app.services.persona_router import pick_persona, resolve_room_personas
+from app.services.persona_router import pick_personas, resolve_room_personas
 from app.services.tts.splitter import FULL_CHUNK_LEN, chunk_text_punctuation
 
 logger = logging.getLogger(__name__)
@@ -212,18 +212,11 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
         if isinstance(req.who_answers, list):
             # seleccion explicita: responden exactamente esas, en orden de clic
             fixed = list(req.who_answers)
-            if echo:
-                fixed = fixed[:1]
-            max_replies = len(fixed)
         elif req.who_answers in eligible:
             # nombre explicito (str): responde solo esa
             fixed = [req.who_answers]
-            max_replies = 1
-        else:
-            # "router" / "random" / nombre inexistente: comportamiento anterior
-            max_replies = min(config.get("max_persona_replies"), len(eligible))
-            if echo:
-                max_replies = 1
+        # si no ("router"/"random"/nombre inexistente), pick_personas decide
+        # quien, cuantos y en que orden; puede devolver [] (NADIE)
 
         user_message_id = req.message_id or str(uuid.uuid4())
 
@@ -250,11 +243,9 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
             new_message("user", "user", req.message, image=image_rel, message_uuid=user_message_id)
         )
 
-        if fixed is not None:
-            first = fixed[0]
-        else:
+        if fixed is None:
             try:
-                first = await pick_persona(
+                fixed = await pick_personas(
                     req.who_answers,
                     req.message,
                     eligible,
@@ -267,29 +258,20 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 yield _sse({"type": "error", "message": str(exc)})
                 yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
                 return
+        if echo:
+            # eco: aunque el router eligiera varias, solo habla la primera
+            fixed = fixed[:1]
 
-        replied: list[str] = []
-        for index in range(max_replies):
+        for index, persona_name in enumerate(fixed):
             if state.cancel_event.is_set():
                 if tts_on:
                     await state.dispatcher.stop()
                 break
-            if fixed is not None:
-                persona_name = fixed[index]
-            elif index == 0:
-                persona_name = first
-            else:
-                remaining = [n for n in eligible if n not in replied]
-                if not remaining:
-                    break
-                persona_name = random.choice(remaining)
-
             persona = state.personas.get(persona_name)
             if persona is None:
                 yield _sse({"type": "error", "message": f"Persona {persona_name} not found"})
                 yield _sse({"type": "complete", "cancelled": state.cancel_event.is_set()})
                 return
-            replied.append(persona_name)
             buf = ""
 
             # id is generated before "start" so T10 can stamp it onto every audio

@@ -221,20 +221,64 @@ def test_router_uses_llm_with_hints(client, mock_llm):
     )
     assert resp.status_code == 200
     events = parse_events(resp.text)
-    assert events[0]["persona"] == "Jean"
+    assert [e["persona"] for e in events if e["type"] == "start"] == ["Jean"]
     calls = non_stream_calls(mock_llm)
     assert len(calls) == 1
     system_prompt = calls[0]["messages"][0]["content"]
-    assert "mondstadt" in system_prompt
+    assert "- Jean: mondstadt, protector" in system_prompt
     assert "snezhnaya" in system_prompt
     assert "liyue" in system_prompt
-    assert "Choose from: Jean, Fischl, Keqing" in system_prompt
-    assert calls[0]["messages"][1] == {"role": "user", "content": "Pick one persona."}
-    assert calls[0]["max_tokens"] == 16
+    # el prompt le dice al router que puede responder 0 (NADIE) o varios,
+    # un nombre por linea, en orden de habla
+    assert "NADIE" in system_prompt
+    assert "One persona name per line" in system_prompt
+    assert calls[0]["messages"][1] == {"role": "user", "content": "Who should respond?"}
+    # 1024: el modelo thinking puede gastar tokens en razonar antes del nombre
+    assert calls[0]["max_tokens"] == 1024
 
 
-def test_router_unknown_name_falls_back_to_random(client, mock_llm):
-    mock_llm.chat_content = "Nadie"
+def test_router_picks_multiple_in_order(client, mock_llm):
+    mock_llm.chat_content = "Fischl\nJean"
+    resp = client.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": "router", "chat_room": "test"},
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    assert [e["persona"] for e in events if e["type"] == "start"] == ["Fischl", "Jean"]
+    assert len(stream_calls(mock_llm)) == 2
+
+
+def test_router_caps_at_max_and_dedupes(client, mock_llm):
+    mock_llm.chat_content = "Jean\nJean\nFischl\nKeqing"
+    resp = client.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": "router", "chat_room": "test"},
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    # max_persona_replies default = 2: Jean (dedupe) + Fischl, Keqing se queda afuera
+    assert [e["persona"] for e in events if e["type"] == "start"] == ["Jean", "Fischl"]
+
+
+def test_router_nadie_no_replies(client, mock_llm):
+    mock_llm.chat_content = "NADIE"
+    resp = client.post(
+        "/api/chat",
+        json={"message": "hola", "who_answers": "router", "chat_room": "test"},
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    types = [e["type"] for e in events]
+    assert "start" not in types
+    assert "error" not in types
+    assert types == ["text_done", "complete"]
+    assert len(non_stream_calls(mock_llm)) == 1
+    assert mock_llm.stream_calls == 0
+
+
+def test_router_unparseable_falls_back_to_random(client, mock_llm):
+    mock_llm.chat_content = "Dendro"
     resp = client.post(
         "/api/chat",
         json={"message": "hola", "who_answers": "router", "chat_room": "test"},
@@ -242,7 +286,9 @@ def test_router_unknown_name_falls_back_to_random(client, mock_llm):
     assert resp.status_code == 200
     events = parse_events(resp.text)
     assert "error" not in [e["type"] for e in events]
-    assert events[0]["persona"] in ROOM_PERSONAS
+    # fallback conservador: 1 aleatoria, no el maximo
+    assert [e["persona"] for e in events if e["type"] == "start"][0] in ROOM_PERSONAS
+    assert [e["type"] for e in events].count("start") == 1
     assert len(non_stream_calls(mock_llm)) == 1
 
 
@@ -335,7 +381,8 @@ def test_mention_short_circuits_router(client, mock_llm):
     )
     assert resp.status_code == 200
     events = parse_events(resp.text)
-    assert events[0]["persona"] == "Jean"
+    # mension unica: responde solo esa, sin LLM ni extras
+    assert [e["persona"] for e in events if e["type"] == "start"] == ["Jean"]
     assert non_stream_calls(mock_llm) == []
 
 
