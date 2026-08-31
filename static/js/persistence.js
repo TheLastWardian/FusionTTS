@@ -352,6 +352,11 @@ export async function attachSavedAudio(targets, room) {
     const files = (m && m.audio) || [];
     if (!files.length) continue;
     t.b.savedAudio = files;
+    // si el usuario sigue el scroll, los botones que se anaden aca no deben
+    // quedar cortados debajo del fold
+    const msgEl = document.getElementById("messages");
+    const follow =
+      msgEl.scrollHeight - msgEl.scrollTop - msgEl.clientHeight < 80;
     let actions = t.b.bodyEl.querySelector(".msg-actions");
     if (!actions) {
       actions = document.createElement("div");
@@ -373,6 +378,7 @@ export async function attachSavedAudio(targets, room) {
       actions.appendChild(play);
     }
     applyAudioMode(t.b.rootEl);
+    if (follow) msgEl.scrollTop = msgEl.scrollHeight;
   }
 }
 

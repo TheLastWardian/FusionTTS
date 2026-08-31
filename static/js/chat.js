@@ -151,6 +151,7 @@ function addSentenceSound(b, ev) {
   if (!ev.audio) return;
   if (!ttsReady()) return;
   b.sounds.push(ev);
+  const follow = nearBottom();
   if (!b.soundsEl) {
     b.soundsEl = document.createElement("div");
     b.soundsEl.className = "msg-sounds";
@@ -179,6 +180,7 @@ function addSentenceSound(b, ev) {
   const b64 = ev.audio;
   btn.addEventListener("click", () => playChunkB64(b64));
   b.soundsEl.appendChild(btn);
+  if (follow) scrollBottom();
 }
 
 function appendToken(b, token) {
@@ -364,6 +366,9 @@ export async function reprocessFrom(msgEl, bubbleEl, messageId, room) {
 function finalizeBubble(b, fullText, tokens) {
   if (!b || b.final) return;
   b.final = true;
+  // si el usuario seguia el scroll, el pie (tokens/audios/borrar) que se
+  // anade aca no debe quedar cortado debajo del fold
+  const follow = nearBottom();
   if (typeof fullText === "string") b.textEl.textContent = fullText;
   if (!b.textEl.textContent.trim()) {
     b.rootEl.remove();
@@ -389,6 +394,7 @@ function finalizeBubble(b, fullText, tokens) {
     b.bodyEl.appendChild(actions);
   }
   applyAudioMode(b.rootEl);
+  if (follow) scrollBottom();
 }
 
 function finishStream() {
