@@ -227,14 +227,15 @@ class PersonaStore:
                 elif etype == "folder":
                     if name in folders:
                         continue
+                    # seen se actualiza al filtrar: un miembro duplicado DENTRO
+                    # de la misma carpeta tambien queda descartado (gana la primera)
                     members = entry.get("personas")
-                    clean = [
-                        m
-                        for m in (members if isinstance(members, list) else [])
-                        if isinstance(m, str) and m in existing and m not in seen
-                    ]
+                    clean = []
+                    for m in (members if isinstance(members, list) else []):
+                        if isinstance(m, str) and m in existing and m not in seen:
+                            seen.add(m)
+                            clean.append(m)
                     folders.add(name)
-                    seen.update(clean)
                     out.append({"type": "folder", "name": name, "personas": clean})
         for persona in self._personas:
             name = persona.get("name")

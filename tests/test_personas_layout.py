@@ -126,6 +126,16 @@ def test_normalizacion_read_carpeta_duplicada_gana_la_primera(store):
     ]
 
 
+def test_normalizacion_read_duplicado_dentro_de_carpeta(store):
+    reloaded = write_layout(store, [
+        {"type": "folder", "name": "A", "personas": ["Jean", "Jean", "Zhongli"]},
+    ])
+    assert reloaded.get_layout() == [
+        {"type": "folder", "name": "A", "personas": ["Jean", "Zhongli"]},
+        {"type": "persona", "name": "Barbara"},
+    ]
+
+
 def test_borrar_persona_limpia_el_layout(store):
     store.save_layout([{"type": "folder", "name": "A", "personas": ["Jean", "Zhongli"]}])
     store.delete("Jean")
