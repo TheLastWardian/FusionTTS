@@ -146,29 +146,68 @@ COMPACT_MIN_TARGETS = 4
 COMPACT_MAX_TOKENS = 10000
 
 
-def _compact_system_prompt(persona_name: str) -> str:
-    return (
-        "Eres el encargado de resumir una conversacion de roleplay para que "
-        f"el personaje {persona_name} pueda continuar la escena sin ver los "
-        "mensajes originales.\n"
-        "Reglas:\n"
-        "- Escribi en el mismo idioma en que se desarrollo la conversacion.\n"
-        "- No inventes detalles, dialogos ni eventos que no esten ahi.\n"
-        "- Maximo ~800 palabras.\n"
-        "- Usá exactamente esta estructura:\n"
-        "\n"
-        "## Personajes y estado\n"
-        "Quienes participan, como estan, sus relaciones actuales.\n"
-        "\n"
-        "## Situacion actual\n"
-        "Donde quedo la escena: que acaba de pasar, en que momento se corta.\n"
-        "\n"
-        "## Hilos abiertos\n"
-        "Promesas, misterios, decisiones pendientes, conflictos, planes.\n"
-        "\n"
-        "## Hechos clave\n"
-        "Nombres, lugares, objetos, reglas del mundo, eventos ya ocurridos."
-    )
+# Sin limite de tokens en el prompt: es un resumen, no llega al budget de
+# output (COMPACT_MAX_TOKENS es el tope duro, margen para thinking).
+_COMPACT_SYSTEM_TEMPLATE = """You are a memory compression assistant for a multi-character chat room.
+Your job: produce a structured summary that lets EVERY character in the room
+continue the conversation without seeing the original messages.
+
+CAST (who is in this room):
+- User: the human participant. Their messages are first-class context:
+  preserve what they say, ask, decide, promise and feel (as stated, never
+  inferred) with the same weight as the characters' lines. Never invent
+  their unspoken thoughts or intentions.
+{cast}
+
+Analyze the conversation and determine its type, then apply the matching strategy:
+
+**ROLEPLAY / CHARACTER (default):**
+- Write as a neutral scene report covering ALL characters - no first person:
+  each character reads the same summary, so none can be the narrator.
+- Preserve: relationship dynamics between every pair of characters, emotional
+  beats, key events, character development, unresolved tensions.
+- Include: names, locations, significant objects, established facts about the world.
+- Keep each character's traits, voice and promises distinct - do not blend
+  characters together or attribute lines to the wrong speaker.
+
+**GENERAL / OTHER:**
+- Preserve: key facts established, user preferences revealed, ongoing tasks,
+  important context for future responses.
+- Prioritize recency: more recent exchanges matter more than older ones.
+
+Rules:
+- This is a rolling summary: fold the previous summary into the new one, drop
+  what is no longer relevant, and make the result fully self-contained. If
+  the previous summary is empty, just summarize the conversation.
+- Write the summary in the language the CHARACTERS speak in the conversation
+  (not the user's, if they differ), so characters keep answering in that
+  language. In a mixed conversation use the characters' dominant language.
+  Keep names, places and quoted terms in their original language.
+- Be dense and specific - avoid vague summaries.
+- Never invent details, dialogue or events that are not in the conversation.
+- Preserve proper nouns, names and specific details exactly.
+- If something was explicitly decided or agreed upon, include it.
+- Images appear as [image: ...] markers: keep only what the marker describes,
+  never describe what you cannot see.
+- Do NOT include meta-commentary about the summary itself.
+
+Use exactly this structure:
+
+## Characters & state
+Who is present, how they are, their current relationships.
+
+## Current situation
+Where the scene is now: what just happened, the exact moment it cuts.
+
+## Open threads
+Promises, mysteries, pending decisions, conflicts, plans.
+
+## Key facts
+Names, places, objects, world rules, events that already happened."""
+
+
+def _compact_system_prompt(cast: list[str]) -> str:
+    return _COMPACT_SYSTEM_TEMPLATE.format(cast="\n".join(cast))
 
 
 def _compact_transcript(messages: list[dict]) -> str:
@@ -209,14 +248,21 @@ async def compact_room(request: Request, room: str) -> dict:
     if not eligible:
         raise HTTPException(status_code=503, detail="room has no personas")
     previous = store.load_summary()
-    parts = []
-    if previous:
-        parts.append("## Resumen anterior\n" + previous)
-    parts.append("## Conversacion a resumir\n" + _compact_transcript(targets))
+    parts = [
+        "PREVIOUS SUMMARY (may be empty - it covers everything before the "
+        "new conversation):\n" + (previous or ""),
+        "Conversation to compress (messages since the previous summary):\n"
+        + _compact_transcript(targets),
+    ]
+    by_name = {p["name"]: p for p in state.personas.list()}
+    cast = []
+    for name in eligible:
+        desc = (by_name.get(name) or {}).get("description") or ""
+        cast.append(f"- {name}: {desc}" if desc else f"- {name}")
     try:
         summary = await state.llm.chat(
             [
-                {"role": "system", "content": _compact_system_prompt(eligible[0])},
+                {"role": "system", "content": _compact_system_prompt(cast)},
                 {"role": "user", "content": "\n\n".join(parts)},
             ],
             max_tokens=COMPACT_MAX_TOKENS,

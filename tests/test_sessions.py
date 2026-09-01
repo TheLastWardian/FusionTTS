@@ -226,13 +226,13 @@ def test_compact_200_marks_and_saves_summary(client):
     compacted = [m for m in store.history if m.get("compacted")]
     assert len(compacted) == 15
     assert all(not m.get("compacted") for m in store.history[-10:])
-    # el prompt de resumen vio el transcript y el system orientado a roleplay
+    # el prompt de resumen vio el transcript y el cast (nombre+descripcion)
     (msgs, max_tokens, temperature) = fake.calls[0]
-    assert "Jean" in msgs[0]["content"]
+    assert "- Jean: d" in msgs[0]["content"]
     assert "user-0" in msgs[1]["content"]
     assert "user-14" in msgs[1]["content"]
     assert max_tokens == 10000
-    assert temperature == 0.3
+    assert temperature == 1.0
 
 
 def test_compact_rolling_includes_previous_summary(client):
@@ -247,7 +247,7 @@ def test_compact_rolling_includes_previous_summary(client):
     r = client.post("/api/rooms/rp2/compact")
     assert r.status_code == 200
     (msgs, _, _) = fake.calls[1]
-    assert "## Resumen anterior" in msgs[1]["content"]
+    assert "PREVIOUS SUMMARY" in msgs[1]["content"]
     assert "RESUMEN OK" in msgs[1]["content"]
     # la 2da vez compactan los siguientes 4 no-resumidos (user-4..asst-7)
     assert "user-4" in msgs[1]["content"]
