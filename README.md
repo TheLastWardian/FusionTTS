@@ -104,6 +104,18 @@ venv\Scripts\python -m pytest
 - `setup.bat` stopped on a prerequisite: install the missing tool (Python 3.11 / git)
   and run it again — it skips everything that is already done.
 
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## References
+
+- [TalkWithMe](https://github.com/scorbo2/TalkWithMe) — the app this project is a
+  re-implementation of (multi-persona local chat + TTS).
+- [OmniVoice](https://github.com/k2-fsa/OmniVoice) — the TTS engine used by the
+  [k2-fsa/OmniVoice model](https://huggingface.co/k2-fsa/OmniVoice) (600+ languages,
+  zero-shot voice cloning).
+
 ## Credits
 
 This project's code was written by an AI coding agent (Qwen 3.8 27B running locally via
