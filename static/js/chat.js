@@ -197,10 +197,28 @@ function wrapSentenceWords(b) {
   }
   if (pos < full.length) b.textEl.append(full.slice(pos));
   b.wordSpans = spans;
+  // si el audio ya iba sonando al momento del re-render, restaurar el
+  // estado dorado (reproducidas + activa) sobre los spans nuevos
+  if (b.lastWord) {
+    const arr = spans.get(b.lastWord.sid);
+    if (arr) {
+      for (let i = 0; i < arr.length; i++) {
+        if (!arr[i]) continue;
+        if (i < b.lastWord.w) arr[i].classList.add("kw-played");
+        else if (i === b.lastWord.w) arr[i].classList.add("kw-active");
+      }
+      b.activeKw = arr[b.lastWord.w] || null;
+    }
+  }
 }
 
-function clearKwActive(b) {
-  if (b.activeKw) b.activeKw.classList.remove("kw-active");
+// Karaoke: la palabra activa pasa a "reproducida" (se queda dorada);
+// b.lastWord recuerda la ultima (sid, word) para restaurar el estado si
+// los spans se re-renderizan a mitad de playback
+function markKwPlayed(b) {
+  if (!b.activeKw) return;
+  b.activeKw.classList.remove("kw-active");
+  b.activeKw.classList.add("kw-played");
   b.activeKw = null;
 }
 
@@ -726,7 +744,7 @@ export function initChat() {
     messagesEl.querySelectorAll(".msg").forEach((m) => applyAudioMode(m));
   });
   // karaoke: la palabra activa llega de tts.js (tracking contra el clock de
-  // playback); -1 = limpiar
+  // playback); -1 = fin de palabra/oracion (la activa pasa a dorado fijo)
   window.addEventListener("tts:word", (e) => {
     const d = e.detail;
     if (!d || !d.messageId) return;
@@ -735,13 +753,19 @@ export function initChat() {
       wordBubbles.delete(d.messageId);
       return;
     }
-    clearKwActive(b);
-    if (d.word < 0 || !b.wordSpans) return;
-    const arr = b.wordSpans.get(d.sentenceId);
-    if (arr && arr[d.word]) {
-      b.activeKw = arr[d.word];
-      b.activeKw.classList.add("kw-active");
+    if (d.word < 0) {
+      // gap entre palabras / fin de oracion: la activa se queda dorada
+      markKwPlayed(b);
+      return;
     }
+    if (!b.wordSpans) return;
+    const arr = b.wordSpans.get(d.sentenceId);
+    const sp = arr && arr[d.word];
+    if (!sp) return;
+    if (b.activeKw && b.activeKw !== sp) markKwPlayed(b);
+    sp.classList.add("kw-active");
+    b.activeKw = sp;
+    b.lastWord = { sid: d.sentenceId, w: d.word };
   });
   updateSendButton();
 }

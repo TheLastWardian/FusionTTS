@@ -21,6 +21,10 @@
   --success-border: rgba(62,207,178,0.3);
   --warning: #f0b429;
   --warning-bg: rgba(240,180,41,0.12);
+  /* karaoke: dorado de palabra reproducida y activa (brillante + glow) */
+  --karaoke-done: #d4af37;
+  --karaoke-active: #ffd75e;
+  --karaoke-glow: rgba(255,215,94,0.75);
   --warning-border: rgba(240,180,41,0.3);
   --danger: #f06464;
   --danger-bg: rgba(240,100,100,0.12);
@@ -51,6 +55,10 @@ html[data-theme="light"] {
   --success-border: rgba(18,138,109,0.3);
   --warning: #a06e00;
   --warning-bg: rgba(160,110,0,0.12);
+  /* karaoke (tema claro: dorados mas oscuros para contraste) */
+  --karaoke-done: #8a6d1a;
+  --karaoke-active: #b8860b;
+  --karaoke-glow: rgba(184,134,11,0.4);
   --warning-border: rgba(160,110,0,0.3);
   --danger: #d43f3f;
   --danger-bg: rgba(212,63,63,0.12);
@@ -657,11 +665,12 @@ body.cols-4 .persona-list, body.cols-4 .persona-children { grid-template-columns
 .msg-act-edit-cancel:hover { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
 .msg-sounds { display: flex; flex-wrap: wrap; gap: 4px; }
 .msg-body > .msg-sounds { margin-top: 4px; }
-/* Karaoke: span de palabra (transparente en reposo) y palabra activa */
-.msg-text .kw { border-radius: 3px; }
+/* Karaoke: la palabra activa brilla en dorado y las reproducidas se
+   quedan en dorado (kw-played) */
+.msg-text .kw.kw-played { color: var(--karaoke-done); }
 .msg-text .kw.kw-active {
-  background: var(--accent-bg);
-  box-shadow: inset 0 -2px 0 var(--accent);
+  color: var(--karaoke-active);
+  text-shadow: 0 0 8px var(--karaoke-glow);
 }
 .msg-sound-btn {
   width: 20px; height: 20px; border-radius: 4px;
