@@ -106,5 +106,5 @@ venv\Scripts\python -m pytest
 
 ## Credits
 
-This project was built with the assistance of an AI coding agent (Qwen 3.8 27B running
-locally via llama.cpp).
+This project's code was written by an AI coding agent (Qwen 3.8 27B running locally via
+llama.cpp), guided by its human operator.
