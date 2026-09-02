@@ -103,3 +103,8 @@ venv\Scripts\python -m pytest
 - `start.bat` complains about a missing venv: run `setup.bat` first.
 - `setup.bat` stopped on a prerequisite: install the missing tool (Python 3.11 / git)
   and run it again — it skips everything that is already done.
+
+## Credits
+
+This project was built with the assistance of an AI coding agent (Qwen 3.8 27B running
+locally via llama.cpp).
