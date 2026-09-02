@@ -994,7 +994,7 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
   outline-offset: 3px;
 }
 .pm-avatar-row.dragover .pm-avatar::after {
-  content: "soltá acá";
+  content: "drop here";
   position: absolute; inset: 0; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,.6);

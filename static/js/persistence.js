@@ -75,15 +75,15 @@ export function playSavedSequence(room, filenames, onDone) {
     seqAudio = audio;
     audio.onended = playNext;
     audio.onerror = () => {
-      toast("No se pudo cargar el audio (" + f + ")", "error");
+      toast("Could not load the audio (" + f + ")", "error");
       finish();
     };
     audio.play().catch((err) => {
       if (token.stopped || finished) return;
       toast(
         err && err.name === "NotAllowedError"
-          ? "El navegador bloqueo el audio (autoplay)"
-          : "No se pudo reproducir el audio",
+          ? "The browser blocked the audio (autoplay)"
+          : "Could not play the audio",
         "error",
       );
       finish();
@@ -104,7 +104,7 @@ function playHistoryAudio(btn, room, filename) {
     if (playing && playing.btn === btn) playing = null;
     iconEl.className = "ti ti-music";
     btn.title = filename;
-    toast("No se pudo cargar el audio", "error");
+    toast("Could not load the audio", "error");
   };
   audio.onended = () => stopHistoryAudio();
   playing = { btn, iconEl, audio, filename };
@@ -114,7 +114,7 @@ function playHistoryAudio(btn, room, filename) {
     .then(
       () => {
         iconEl.className = "ti ti-player-stop";
-        btn.title = "Detener";
+        btn.title = "Stop";
       },
       (err) => {
         if (playing && playing.btn === btn) playing = null;
@@ -122,8 +122,8 @@ function playHistoryAudio(btn, room, filename) {
         btn.title = filename;
         toast(
           err && err.name === "NotAllowedError"
-            ? "El navegador bloqueo el audio (autoplay)"
-            : "No se pudo reproducir el audio",
+            ? "The browser blocked the audio (autoplay)"
+            : "Could not play the audio",
           "error",
         );
       },
@@ -136,7 +136,7 @@ export function showEmptyState(el) {
   const i = document.createElement("i");
   i.className = "ti ti-messages";
   const span = document.createElement("span");
-  span.textContent = "Sin mensajes todavía";
+  span.textContent = "No messages yet";
   es.append(i, span);
   el.appendChild(es);
 }
@@ -152,7 +152,7 @@ export async function deleteMessage(messageId, room, el) {
       { method: "DELETE" },
     );
   } catch (err) {
-    toast("No se pudo eliminar: " + (err && err.message ? err.message : String(err)), "error");
+    toast("Could not delete: " + (err && err.message ? err.message : String(err)), "error");
     return false;
   }
   if (!res.ok) {
@@ -169,7 +169,7 @@ export async function deleteMessage(messageId, room, el) {
   el.remove();
   const elMessages = document.getElementById("messages");
   if (!elMessages.querySelector(".msg")) showEmptyState(elMessages);
-  toast("Mensaje eliminado", "success");
+  toast("Message deleted", "success");
   refreshContextUsage();
   return true;
 }
@@ -177,7 +177,7 @@ export async function deleteMessage(messageId, room, el) {
 export function makeDeleteButton(messageId, room, el, onDeleted) {
   const del = document.createElement("button");
   del.className = "msg-act msg-act-delete";
-  del.title = "Eliminar del contexto";
+  del.title = "Remove from context";
   const di = document.createElement("i");
   di.className = "ti ti-trash";
   del.appendChild(di);
@@ -194,7 +194,7 @@ function makeReplayButton(files, room, rootEl) {
   const replay = document.createElement("button");
   replay.className = "msg-act msg-act-replay";
   replay.title = "Play all";
-  replay.setAttribute("aria-label", "Reproducir todo el mensaje en orden (audio guardado)");
+  replay.setAttribute("aria-label", "Play the whole message in order (saved audio)");
   replay.disabled = true;
   const ri = document.createElement("i");
   ri.className = "ti ti-player-play-filled";
@@ -232,7 +232,7 @@ export function beginMessageEdit(msgEl, bubbleEl, messageId, room) {
   const taEl = document.createElement("textarea");
   taEl.className = "msg-edit-ta";
   taEl.value = originalText;
-  taEl.title = "Enter = guardar · Esc = cancelar";
+  taEl.title = "Enter = save · Esc = cancel";
   taEl.spellcheck = false;
   bubbleEl.replaceChild(taEl, first);
   bubbleEl.style.width = frozenWidth + "px";
@@ -240,13 +240,13 @@ export function beginMessageEdit(msgEl, bubbleEl, messageId, room) {
   // los botones de editar se meten en la barra interior (junto al borrar)
   const okBtn = document.createElement("button");
   okBtn.className = "msg-act msg-act-edit-ok";
-  okBtn.title = "Guardar";
+  okBtn.title = "Save";
   const oki = document.createElement("i");
   oki.className = "ti ti-check";
   okBtn.appendChild(oki);
   const cancelBtn = document.createElement("button");
   cancelBtn.className = "msg-act msg-act-edit-cancel";
-  cancelBtn.title = "Cancelar";
+  cancelBtn.title = "Cancel";
   const xi = document.createElement("i");
   xi.className = "ti ti-x";
   cancelBtn.appendChild(xi);
@@ -276,7 +276,7 @@ export function beginMessageEdit(msgEl, bubbleEl, messageId, room) {
     if (busy) return;
     const text = taEl.value.trim();
     if (!text) {
-      toast("El mensaje no puede quedar vacío", "warning");
+      toast("The message cannot be empty", "warning");
       return;
     }
     if (text === originalText) {
@@ -292,10 +292,10 @@ export function beginMessageEdit(msgEl, bubbleEl, messageId, room) {
         { method: "PATCH", body: { text } },
       );
       finish(text);
-      toast("Mensaje editado", "success");
+      toast("Message edited", "success");
       refreshContextUsage();
     } catch (err) {
-      toast(err.message || "Error al editar el mensaje", "error");
+      toast(err.message || "Error editing the message", "error");
       if (!exited) {
         busy = false;
         okBtn.disabled = false;
@@ -409,7 +409,7 @@ function renderHistoryMessage(el, m, room) {
   body.className = "msg-body";
   const meta = document.createElement("div");
   meta.className = "msg-meta";
-  meta.textContent = isUser ? "Tú" : m.sender;
+  meta.textContent = isUser ? "You" : m.sender;
   const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
   // "(imagen)" era el placeholder viejo para image-only: no se muestra
@@ -417,7 +417,7 @@ function renderHistoryMessage(el, m, room) {
   if (m.text && !legacyImageOnly) bubble.textContent = m.text;
   if (isUser) {
     // solo los propios se editan (doble click)
-    bubble.title = "Doble click para editar";
+    bubble.title = "Double click to edit";
     bubble.addEventListener("dblclick", () => beginMessageEdit(msg, bubble, m.uuid, room));
   }
   if (m.image) {
@@ -474,7 +474,7 @@ function renderCompactSummary(summary) {
   const ico = document.createElement("i");
   ico.className = "ti ti-minimize";
   const label = document.createElement("span");
-  label.textContent = "Resumen del contexto previo";
+  label.textContent = "Summary of previous context";
   head.append(ico, label);
   const text = document.createElement("div");
   text.className = "compact-text";
@@ -492,7 +492,7 @@ export async function loadHistory(room) {
   try {
     data = await api("/api/session/history?room=" + encodeURIComponent(room));
   } catch (err) {
-    toast(err.message || "Error al cargar el historial", "error");
+    toast(err.message || "Error loading history", "error");
     return;
   }
   const el = document.getElementById("messages");

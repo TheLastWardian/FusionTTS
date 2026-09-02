@@ -57,9 +57,9 @@ export function addFolder(layout, name, index = 0) {
 }
 
 export function renameFolder(layout, oldName, newName) {
-  if (typeof newName !== "string" || !newName) throw new Error("nombre de carpeta vacio");
+  if (typeof newName !== "string" || !newName) throw new Error("empty folder name");
   if (layout.some((e) => e.type === "folder" && e.name === newName && e.name !== oldName)) {
-    throw new Error("carpeta duplicada: " + newName);
+    throw new Error("duplicate folder: " + newName);
   }
   return layout.map((e) =>
     e.type === "folder" && e.name === oldName ? { ...e, name: newName } : e
@@ -114,7 +114,7 @@ export function movePersona(layout, name, target) {
   }
   if (target.folder) {
     const idx = out.findIndex((e) => e.type === "folder" && e.name === target.folder);
-    if (idx === -1) throw new Error("carpeta inexistente: " + target.folder);
+    if (idx === -1) throw new Error("nonexistent folder: " + target.folder);
     const members = out[idx].personas.slice();
     let i = target.index == null ? members.length : target.index;
     if (oldMember !== -1 && i > oldMember) i -= 1;

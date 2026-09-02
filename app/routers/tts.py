@@ -117,7 +117,7 @@ async def resume(request: Request) -> dict:
 async def speak(payload: SpeakRequest, request: Request) -> Response:
     state = _state(request)
     if (await state.tts_engine.status())["state"] != "running":
-        raise HTTPException(status_code=409, detail="TTS no está activo")
+        raise HTTPException(status_code=409, detail="TTS is not active")
     if payload.persona:
         audio_b64, transcript, language = state.dispatcher.resolve_persona(payload.persona)
     else:

@@ -160,7 +160,7 @@ def test_06_speak_tts_off_409(client):
     c, _ = client
     r = c.post("/api/tts/speak", json={"text": "hola"})
     assert r.status_code == 409
-    assert r.json() == {"detail": "TTS no está activo"}
+    assert r.json() == {"detail": "TTS is not active"}
 
 
 def test_07_speak(client):

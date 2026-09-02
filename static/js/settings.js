@@ -8,26 +8,26 @@ const LLM_GROUPS = [
     group: "LLM",
     items: [
       { key: "llm_base_url", type: "text", label: "Base URL" },
-      { key: "llm_model", type: "text", label: "Modelo", placeholder: "vacío = autodetect" },
+      { key: "llm_model", type: "text", label: "Model", placeholder: "empty = autodetect" },
       {
         key: "global_system_prompt",
         type: "textarea",
-        label: "System prompt global (va antes del prompt de cada persona)",
-        placeholder: "reglas globales, vacío = sin prompt global",
+        label: "System prompt global (goes before each persona's prompt)",
+        placeholder: "global rules, empty = no global prompt",
         rows: 4,
       },
       {
         key: "newcomer_prompt",
         type: "textarea",
-        label: "Personajes nuevos que ingresan a la conversacion (se suma al system prompt)",
-        placeholder: "regla de como tratar los mensajes que no presenciaron; vacio = desactivado",
+        label: "New characters entering the conversation (added to the system prompt)",
+        placeholder: "rule for how to handle messages they did not witness; empty = disabled",
         rows: 4,
       },
       {
         key: "vision_prompt",
         type: "textarea",
-        label: "Descripción de imagenes subidas al chat (se envia al LLM)",
-        placeholder: "como describir la imagen para que los personajes reaccionen a la accion; vacio = default",
+        label: "Description of images uploaded to the chat (sent to the LLM)",
+        placeholder: "how to describe the image so the characters react to the action; empty = default",
         rows: 3,
       },
       { key: "llm_temperature", type: "range", min: 0, max: 2, step: 0.05, kind: "float", label: "Temperature" },
@@ -39,13 +39,13 @@ const LLM_GROUPS = [
     group: "General",
     items: [
       { key: "max_persona_replies", type: "range", min: 1, max: 5, step: 1, kind: "int", label: "Max replies" },
-      { key: "auto_chat_max_turns", type: "range", min: 1, max: 100, step: 1, kind: "int", label: "Auto-chat turns (por mensaje)" },
+      { key: "auto_chat_max_turns", type: "range", min: 1, max: 100, step: 1, kind: "int", label: "Auto-chat turns (per message)" },
       { key: "max_context_turns", type: "range", min: 0, max: 500, step: 1, kind: "int", label: "Context turns" },
-      { key: "persona_name_mentions", type: "toggle", label: "Menciones por nombre" },
+      { key: "persona_name_mentions", type: "toggle", label: "Name mentions" },
     ],
   },
   {
-    group: "Persistencia",
+    group: "Persistence",
     items: [
       { key: "save_history", type: "toggle", label: "Save history" },
     ],
@@ -58,16 +58,16 @@ const TTS_GROUPS = [
   {
     group: "TTS",
     items: [
-      { key: "omnivoice_dir", type: "text", label: "Ruta del repo de OmniVoice (vacío = sibling ..\\OmniVoice)", placeholder: "vacío = ..\\OmniVoice" },
-      { key: "tts_mode", type: "select", options: ["sentences", "full"], label: "Modo de audio (por oraciones / bloque completo)" },
+      { key: "omnivoice_dir", type: "text", label: "OmniVoice repo path (empty = sibling ..\\OmniVoice)", placeholder: "empty = ..\\OmniVoice" },
+      { key: "tts_mode", type: "select", options: ["sentences", "full"], label: "Audio mode (per sentence / full block)" },
       { key: "tts_num_steps", type: "range", min: 1, max: 100, step: 1, kind: "int", label: "Steps" },
       { key: "tts_guidance_scale", type: "range", min: 0.1, max: 3, step: 0.1, kind: "float", label: "Guidance" },
       { key: "tts_speed", type: "range", min: 0.5, max: 2, step: 0.05, kind: "float", label: "Speed" },
-      { key: "tts_language", type: "select", inline: true, label: "Language (auto = detectar por persona)" },
-      { key: "tts_seed", type: "number", min: 0, max: 4294967295, label: "Seed", placeholder: "vacío = aleatorio", nullable: true },
+      { key: "tts_language", type: "select", inline: true, label: "Language (auto = detect per persona)" },
+      { key: "tts_seed", type: "number", min: 0, max: 4294967295, label: "Seed", placeholder: "empty = random", nullable: true },
       { key: "tts_sentence_timeout", type: "range", min: 5, max: 300, step: 1, kind: "int", label: "Timeout", suffix: " s" },
       { key: "silence_ms", type: "range", min: 0, max: 1000, step: 10, kind: "int", label: "Silence", suffix: " ms" },
-      { key: "tts_alignment", type: "select", inline: true, options: ["off", "cpu", "gpu"], label: "Resaltado de palabras (karaoke)" },
+      { key: "tts_alignment", type: "select", inline: true, options: ["off", "cpu", "gpu"], label: "Word highlight (karaoke)" },
     ],
   },
   {
@@ -77,12 +77,12 @@ const TTS_GROUPS = [
         key: "tts_instruct",
         type: "instruct",
         categories: [
-          { key: "gender", label: "Género", options: ["male", "female"] },
-          { key: "age", label: "Edad", options: ["child", "teenager", "young adult", "middle-aged", "elderly"] },
+          { key: "gender", label: "Gender", options: ["male", "female"] },
+          { key: "age", label: "Age", options: ["child", "teenager", "young adult", "middle-aged", "elderly"] },
           { key: "pitch", label: "Pitch", options: ["very low pitch", "low pitch", "moderate pitch", "high pitch", "very high pitch"] },
-          { key: "style", label: "Estilo", options: ["whisper"] },
-          { key: "accent_en", label: "Acento (EN)", options: ["american accent", "british accent", "australian accent", "canadian accent", "indian accent", "chinese accent", "korean accent", "japanese accent", "portuguese accent", "russian accent"] },
-          { key: "dialect_zh", label: "Dialecto (ZH)", options: ["河南话", "陕西话", "四川话", "贵州话", "云南话", "桂林话", "济南话", "石家庄话", "甘肃话", "宁夏话", "青岛话", "东北话"] },
+          { key: "style", label: "Style", options: ["whisper"] },
+          { key: "accent_en", label: "Accent (EN)", options: ["american accent", "british accent", "australian accent", "canadian accent", "indian accent", "chinese accent", "korean accent", "japanese accent", "portuguese accent", "russian accent"] },
+          { key: "dialect_zh", label: "Dialect (ZH)", options: ["河南话", "陕西话", "四川话", "贵州话", "云南话", "桂林话", "济南话", "石家庄话", "甘肃话", "宁夏话", "青岛话", "东北话"] },
         ],
       },
     ],
@@ -98,11 +98,11 @@ const TTS_GROUPS = [
   {
     group: "VRAM",
     items: [
-      { key: "tts_int8", type: "toggle", label: "INT8 (menos VRAM, misma calidad)" },
+      { key: "tts_int8", type: "toggle", label: "INT8 (less VRAM, same quality)" },
     ],
   },
   {
-    group: "Persistencia",
+    group: "Persistence",
     items: [
       { key: "save_audio", type: "toggle", label: "Save audio" },
     ],
@@ -122,7 +122,7 @@ const save = debounce(async () => {
       // no volverlo a arrastrar por los valores intermedios
       if (controlUnchanged(job)) setControl(job.key, res.value);
     } catch (err) {
-      toast(err.message || "Error al guardar la configuración", "error");
+      toast(err.message || "Error saving the settings", "error");
       setControl(job.key, state.config[job.key]);
     }
   }
@@ -162,7 +162,7 @@ function setControl(key, value) {
       const match = cat.options.find((o) => tokens.includes(o));
       c.selects[cat.key].value = match ?? "auto";
     }
-    if (unknown.length) toast(`Instruct con valores no reconocidos: ${unknown.join(", ")} — se descartan al próximo cambio`, "warning");
+    if (unknown.length) toast(`Instruct with unrecognized values: ${unknown.join(", ")} — they will be dropped on the next change`, "warning");
     return;
   }
   if (c.field.type === "toggle") {
@@ -211,7 +211,7 @@ export function refreshTtsLanguageOptions() {
   if (!opts.includes(cur)) {
     if (c) c.input.value = "en";
     if (state.config.tts_language !== "en") {
-      toast(`tts_language "${cur}" ya no está disponible; vuelvo a "en"`, "warning");
+      toast(`tts_language "${cur}" is no longer available; falling back to "en"`, "warning");
       scheduleSave("tts_language", "en");
     }
     return;
@@ -254,7 +254,7 @@ function buildInstructField(f) {
   wrap.appendChild(grid);
   const note = document.createElement("div");
   note.className = "cfg-note";
-  note.textContent = "Con audio de referencia (voice cloning) no cambia rasgos: la referencia gana los conflictos y el instruct solo refuerza rasgos consistentes (p. ej. dialecto chino). Sin referencia (auto/design) define la voz.";
+  note.textContent = "With a reference audio (voice cloning) it does not change traits: the reference wins conflicts and the instruct only reinforces consistent traits (e.g. Chinese dialect). Without a reference (auto/design) it defines the voice.";
   wrap.appendChild(note);
   controls[f.key] = { field: f, input: null, readout: null, selects };
   setControl(f.key, state.config[f.key]);

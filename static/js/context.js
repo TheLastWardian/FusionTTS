@@ -29,18 +29,18 @@ function renderUsage(d, box, num, stale) {
     : fmt(d.prompt_tokens);
   const turnsPart =
     d.turns_included === d.history_total
-      ? d.history_total + " mensajes en el contexto"
-      : "los ultimos " + d.turns_included + " de " + d.history_total +
-        " mensajes (limite: " + d.turns_included + ")";
+      ? d.history_total + " messages in context"
+      : "the last " + d.turns_included + " of " + d.history_total +
+        " messages (limit: " + d.turns_included + ")";
   const pctPart = d.context_window ? " (" + pct + "%)" : "";
   box.title =
-    "Contexto: " + fmt(d.prompt_tokens) + " de " +
+    "Context: " + fmt(d.prompt_tokens) + " of " +
     (d.context_window ? fmt(d.context_window) : "?") + " tokens" + pctPart +
     " · " + turnsPart +
-    ". El limite se cambia en Config → LLM → 'Context turns' (max_context_turns): " +
-    "cuantos mensajes del historial ve el LLM. El circulo tiene un piso de " +
-    "visibilidad (~5%) cuando hay uso; de ahi crece 1:1 con el % real." +
-    (stale ? " · valor anterior: el server LLM no respondio la ultima sonda" : "");
+    ". The limit is changed in Config → LLM → 'Context turns' (max_context_turns): " +
+    "how many history messages the LLM sees. The circle has a visibility " +
+    "floor (~5%) when there is usage; from there it grows 1:1 with the real %." +
+    (stale ? " · stale value: the LLM server did not answer the last probe" : "");
 }
 
 export async function refreshContextUsage() {
@@ -64,7 +64,7 @@ export async function refreshContextUsage() {
       box.classList.remove("warn", "crit", "stale");
       box.style.setProperty("--ctx-pct", 0);
       num.textContent = "…";
-      box.title = "Consultando uso de contexto al server LLM…";
+      box.title = "Querying context usage from the LLM server…";
     }
   } finally {
     inFlight = false;

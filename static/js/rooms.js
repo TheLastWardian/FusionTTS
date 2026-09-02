@@ -28,7 +28,7 @@ function mainRow() {
   const span = document.createElement("span");
   span.textContent = MAIN_LABEL;
   b.append(i, span);
-  b.title = "Todos los personajes";
+  b.title = "All characters";
   b.addEventListener("click", () => switchRoom(MAIN_ROOM));
   row.appendChild(b);
   return row;
@@ -58,7 +58,7 @@ function roomRow(r) {
   const auto = document.createElement("button");
   auto.className = "room-auto" + (r.auto_chat ? " on" : "");
   auto.title =
-    "Auto-chat: la room conversa sola (el router decide quien sigue hablando)";
+    "Auto-chat: the room chats by itself (the router decides who speaks next)";
   const ai = document.createElement("i");
   ai.className = "ti ti-refresh";
   auto.appendChild(ai);
@@ -68,7 +68,7 @@ function roomRow(r) {
   });
   const personas = document.createElement("button");
   personas.className = "room-personas";
-  personas.title = "Personajes de la room";
+  personas.title = "Room characters";
   const pi = document.createElement("i");
   pi.className = "ti ti-users";
   personas.appendChild(pi);
@@ -78,7 +78,7 @@ function roomRow(r) {
   });
   const del = document.createElement("button");
   del.className = "room-del";
-  del.title = "Eliminar room";
+  del.title = "Delete room";
   const di = document.createElement("i");
   di.className = "ti ti-trash";
   del.appendChild(di);
@@ -126,7 +126,7 @@ async function toggleEcho(name) {
     renderRooms();
     toast("Echo chamber " + (r.echo_chamber ? "ON" : "OFF") + ": " + r.name, "info");
   } catch (err) {
-    toast(err.message || "Error al cambiar echo chamber", "error");
+    toast(err.message || "Error toggling echo chamber", "error");
   }
 }
 
@@ -147,7 +147,7 @@ async function toggleAutoChat(name) {
     renderRooms();
     toast("Auto-chat " + (r.auto_chat ? "ON" : "OFF") + ": " + r.name, "info");
   } catch (err) {
-    toast(err.message || "Error al cambiar auto-chat", "error");
+    toast(err.message || "Error toggling auto-chat", "error");
   }
 }
 
@@ -160,20 +160,20 @@ function updateLabel() {
 // guardados en disco no se tocan)
 async function clearRoomChat() {
   if (state.streaming) {
-    toast("Esperá a que termine la respuesta antes de borrar", "warning");
+    toast("Wait for the response to finish before clearing", "warning");
     return;
   }
   const el = document.getElementById("messages");
   if (!el.querySelector(".msg")) {
-    toast("No hay mensajes para borrar en esta room", "info");
+    toast("There are no messages to clear in this room", "info");
     return;
   }
   const label = state.room === MAIN_ROOM ? MAIN_LABEL : state.room;
   if (
     !confirm(
-      "¿Borrar todo el contexto de la room '" + label + "'?\n" +
-        "Se eliminan todos los mensajes del chat. El audio y las imágenes " +
-        "guardados en disco no se tocan.",
+      "Clear the entire context of the room '" + label + "'?\n" +
+        "All chat messages are deleted. Audio and images saved on disk " +
+        "are not touched.",
     )
   ) {
     return;
@@ -186,9 +186,9 @@ async function clearRoomChat() {
     el.textContent = "";
     showEmptyState(el);
     refreshContextUsage();
-    toast("Contexto de la room borrado", "success");
+    toast("Room context cleared", "success");
   } catch (err) {
-    toast(err.message || "Error al borrar el contexto", "error");
+    toast(err.message || "Error clearing the context", "error");
   }
 }
 
@@ -198,7 +198,7 @@ async function compactRoomChat() {
   const btn = document.getElementById("btn-compact");
   if (btn.disabled) return;
   if (state.streaming) {
-    toast("Esperá a que termine la respuesta antes de compactar", "warning");
+    toast("Wait for the response to finish before compacting", "warning");
     return;
   }
   const icon = btn.querySelector("i");
@@ -210,10 +210,10 @@ async function compactRoomChat() {
       { method: "POST" },
     );
     // el tooltip del boton pasa a mostrar el ultimo resumen (para hojearlo)
-    btn.title = "Ultimo resumen:\n\n" + d.summary;
-    btn.setAttribute("aria-label", "Ver ultimo resumen / compactar contexto");
+    btn.title = "Last summary:\n\n" + d.summary;
+    btn.setAttribute("aria-label", "View last summary / compact context");
     toast(
-      "Contexto compactado: " + d.compacted + " mensajes resumidos " +
+      "Context compacted: " + d.compacted + " messages summarized " +
         (d.summary_tokens != null ? "(" + d.summary_tokens + " tokens)" : ""),
       "success",
     );
@@ -221,7 +221,7 @@ async function compactRoomChat() {
     await loadHistory(state.room);
     refreshContextUsage();
   } catch (err) {
-    toast(err.message || "Error al compactar el contexto", "error");
+    toast(err.message || "Error compacting the context", "error");
   } finally {
     btn.disabled = false;
     icon.className = "ti ti-minimize";
@@ -279,7 +279,7 @@ export async function initRooms() {
     if (!name) return;
     const names = selectedNames();
     if (names.length === 0) {
-      toast("Elegí al menos 1 personaje para la room", "error");
+      toast("Select at least 1 character for the room", "error");
       return;
     }
     try {
@@ -293,10 +293,10 @@ export async function initRooms() {
       renderRooms();
       refreshRoomViews();
       updateLabel();
-      toast("Room creado: " + created.name, "success");
+      toast("Room created: " + created.name, "success");
       await loadHistory(created.name);
     } catch (err) {
-      toast(err.message || "Error al crear el room", "error");
+      toast(err.message || "Error creating the room", "error");
     }
   };
 
@@ -307,7 +307,7 @@ export async function initRooms() {
 
   newBtn.addEventListener("click", () => {
     if (state.personas.length === 0) {
-      toast("Personas todavía no cargadas", "error");
+      toast("Personas not loaded yet", "error");
       return;
     }
     buildChecks();
@@ -329,7 +329,7 @@ export async function initRooms() {
 }
 
 async function deleteRoom(name) {
-  if (!confirm("¿Eliminar la room '" + name + "'?\nSe borrará la room y todo su historial.")) return;
+  if (!confirm("Delete the room '" + name + "'?\nThe room and all its history will be deleted.")) return;
   try {
     await api("/api/rooms/" + encodeURIComponent(name), { method: "DELETE" });
     state.rooms = state.rooms.filter((x) => x.name !== name);
@@ -339,13 +339,13 @@ async function deleteRoom(name) {
       refreshRoomViews();
       updateLabel();
       await loadHistory(MAIN_ROOM);
-      return toast("Room eliminada: " + name, "success");
+      return toast("Room deleted: " + name, "success");
     }
     renderRooms();
     updateLabel();
-    toast("Room eliminada: " + name, "success");
+    toast("Room deleted: " + name, "success");
   } catch (err) {
-    toast(err.message || "Error al eliminar la room", "error");
+    toast(err.message || "Error deleting the room", "error");
   }
 }
 
@@ -383,7 +383,7 @@ function openRoomPersonaModal(name) {
   const r = state.rooms.find((x) => x.name === name);
   if (!r) return;
   if (state.personas.length === 0) {
-    toast("Personas todavía no cargadas", "error");
+    toast("Personas not loaded yet", "error");
     return;
   }
   const overlay = document.createElement("div");
@@ -395,11 +395,11 @@ function openRoomPersonaModal(name) {
   head.className = "persona-modal-head";
   const titleEl = document.createElement("div");
   titleEl.className = "persona-modal-title";
-  titleEl.textContent = "Personajes de «" + r.name + "»";
+  titleEl.textContent = "Characters of «" + r.name + "»";
   const x = document.createElement("button");
   x.className = "persona-modal-x";
-  x.title = "Cerrar";
-  x.setAttribute("aria-label", "Cerrar");
+  x.title = "Close";
+  x.setAttribute("aria-label", "Close");
   const xi = document.createElement("i");
   xi.className = "ti ti-x";
   x.appendChild(xi);
@@ -417,11 +417,11 @@ function openRoomPersonaModal(name) {
   foot.className = "persona-modal-foot";
   const cancel = document.createElement("button");
   cancel.className = "pm-btn";
-  cancel.textContent = "Cancelar";
+  cancel.textContent = "Cancel";
   cancel.addEventListener("click", closeRoomModal);
   const save = document.createElement("button");
   save.className = "pm-btn primary";
-  save.textContent = "Guardar";
+  save.textContent = "Save";
   save.addEventListener("click", () => saveRoomPersonas(name, checks));
   foot.append(cancel, save);
 
@@ -440,7 +440,7 @@ async function saveRoomPersonas(name, checks) {
   if (!r) return;
   const names = [...checks.querySelectorAll("input[type=checkbox]:checked")].map((cb) => cb.value);
   if (names.length === 0) {
-    toast("La room necesita al menos 1 personaje", "error");
+    toast("The room needs at least 1 character", "error");
     return;
   }
   try {
@@ -455,8 +455,8 @@ async function saveRoomPersonas(name, checks) {
       refreshRoomViews();
       refreshContextUsage();
     }
-    toast("Personajes actualizados: " + r.name, "success");
+    toast("Characters updated: " + r.name, "success");
   } catch (err) {
-    toast(err.message || "Error al guardar los personajes", "error");
+    toast(err.message || "Error saving the characters", "error");
   }
 }

@@ -14,8 +14,8 @@
   <header class="topbar">
     <span class="tb-brand">FusionTTS</span>
     <span class="tb-room" id="tb-room">
-      <i class="ti ti-messages" title="Room actual (cambiá desde el menú)"></i>
-      <span id="room-label" title="Room actual (cambiá desde el menú)">…</span>
+      <i class="ti ti-messages" title="Current room (switch from the menu)"></i>
+      <span id="room-label" title="Current room (switch from the menu)">…</span>
     </span>
     <div id="tts-chip" class="tts-chip" title="Click para encender/apagar TTS">
       <div class="tts-wave" id="tts-wave">
@@ -88,7 +88,7 @@
     <div class="messages" id="messages">
       <div class="empty-state">
         <i class="ti ti-messages"></i>
-        <span>Sin mensajes todavía</span>
+        <span>No messages yet</span>
       </div>
     </div>
 
@@ -100,11 +100,11 @@
             <span class="input-who-label">Responde:</span>
             <span id="who-chips"></span>
           </div>
-          <textarea class="chat-input" id="chat-input" placeholder="Escribí un mensaje… (Enter para enviar, ctrl+V o arrastrar una imagen)" rows="1"></textarea>
+          <textarea class="chat-input" id="chat-input" placeholder="Type a message… (Enter to send, ctrl+V or drag an image)" rows="1"></textarea>
         </div>
         <input type="file" id="image-input" accept="image/*" hidden>
         <div class="input-actions">
-          <button class="send-btn image-btn" id="btn-image" aria-label="Adjuntar imagen" title="Adjuntar imagen (también ctrl+V o arrastrar al chat)"><i class="ti ti-photo"></i></button>
+          <button class="send-btn image-btn" id="btn-image" aria-label="Attach image" title="Attach image (also ctrl+V or drag to the chat)"><i class="ti ti-photo"></i></button>
           <button class="send-btn" id="btn-send" aria-label="Enviar mensaje" title="Enviar"><i class="ti ti-send"></i></button>
         </div>
       </div>
@@ -123,7 +123,7 @@
     <div class="right-tabs">
       <button class="rtab active" id="tab-llm">LLM</button>
       <button class="rtab" id="tab-tts">TTS</button>
-      <button class="rtab" id="tab-personas">Añadir persona</button>
+      <button class="rtab" id="tab-personas">Add persona</button>
     </div>
     <div class="rpanel active" id="rpanel-llm"></div>
     <div class="rpanel" id="rpanel-tts"></div>

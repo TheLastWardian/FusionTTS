@@ -26,7 +26,7 @@ try {
   const results = await Promise.allSettled([initSettings(), initPersonas(), initRooms(), initChat(), initTTS()]);
   for (const r of results) {
     if (r.status === "rejected") {
-      toast((r.reason && r.reason.message) || "Error al inicializar un módulo", "error");
+      toast((r.reason && r.reason.message) || "Error initializing a module", "error");
     }
   }
 } catch {

@@ -274,7 +274,7 @@ async def compact_room(request: Request, room: str) -> dict:
         ) from exc
     summary = summary.strip()
     if not summary:
-        raise HTTPException(status_code=502, detail="el LLM devolvio un resumen vacio")
+        raise HTTPException(status_code=502, detail="the LLM returned an empty summary")
     marked = store.apply_compaction([m["uuid"] for m in targets], summary)
     try:
         summary_tokens = await state.llm.count_tokens(

@@ -24,13 +24,13 @@ def read_settings(path=None):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
-        print(f"WARNING: settings.json no existe ({path}), usando defaults.")
+        print(f"WARNING: settings.json does not exist ({path}), using defaults.")
         return {}
     except (json.JSONDecodeError, ValueError, OSError) as exc:
-        print(f"WARNING: settings.json invalido ({exc}), usando defaults.")
+        print(f"WARNING: settings.json is invalid ({exc}), using defaults.")
         return {}
     if not isinstance(data, dict):
-        print(f"WARNING: settings.json no es un objeto JSON ({path}), usando defaults.")
+        print(f"WARNING: settings.json is not a JSON object ({path}), using defaults.")
         return {}
     return data
 
@@ -86,27 +86,27 @@ def _kill_tree(pid):
 
 def main():
     if not os.path.exists(APP_PYTHON):
-        print("ERROR: venv no existe. Ejecuta setup.bat primero.")
+        print("ERROR: venv does not exist. Run setup.bat first.")
         sys.exit(1)
 
     settings = read_settings()
     tts_py = resolve_tts_python(settings)
 
     print("=" * 60)
-    print("  FusionTTS - arranca el app (el TTS server lo spawnea el app, bajo demanda)")
+    print("  FusionTTS - starts the app (the TTS server is spawned by the app, on demand)")
     print("=" * 60)
     print(f"  App:   {APP_URL}")
     if tts_py:
-        print(f"  TTS:   OK - python del server: {tts_py}")
+        print(f"  TTS:   OK - server python: {tts_py}")
     else:
-        print("  TTS:   WARNING - python del TTS no se encontro; el TTS no funcionara")
+        print("  TTS:   WARNING - TTS python not found; TTS will not work")
     llm_url = str(settings.get("llm_base_url") or "").strip().rstrip("/")
     if not llm_url:
         llm_url = "http://localhost:8080"
     if wait_http(llm_url + "/health", LLM_CHECK_TIMEOUT):
         print(f"  LLM:   OK - {llm_url}")
     else:
-        print(f"  LLM:   WARNING - no detectado en {llm_url}; el chat no funcionara hasta que lo inicies")
+        print(f"  LLM:   WARNING - not detected at {llm_url}; chat will not work until you start it")
     print()
 
     proc = subprocess.Popen(
@@ -127,7 +127,7 @@ def main():
     )
 
     def shutdown(signum, frame):
-        print("\nApagando...")
+        print("\nShutting down...")
         try:
             # CTRL_BREAK (1), no CTRL_C (0): uvicorn (CREATE_NEW_PROCESS_GROUP)
             # ignora el CTRL_C empircamente pero cierra al instante con BREAK
@@ -146,7 +146,7 @@ def main():
                 proc.wait()
             except Exception:
                 pass
-        print("Listo.")
+        print("Done.")
         os._exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
@@ -154,21 +154,21 @@ def main():
         signal.signal(signal.SIGBREAK, shutdown)
 
     if not wait_http(APP_URL + "/api/health", APP_HEALTH_TIMEOUT):
-        print("ERROR: el app no levanto tras 60 s. Apagando el proceso.")
+        print("ERROR: the app did not start within 60 s. Killing the process.")
         _kill_tree(proc.pid)
         sys.exit(1)
 
-    print(f"  App lista: {APP_URL}")
+    print(f"  App ready: {APP_URL}")
     print()
-    print("  CTRL+C = APAGAR TODO")
-    print("  CERRAR LA VENTANA = APAGAR TODO")
+    print("  CTRL+C = SHUTDOWN ALL")
+    print("  CLOSE THE WINDOW = SHUTDOWN ALL")
     print()
 
     while proc.poll() is None:
         time.sleep(0.5)
 
     code = proc.returncode if proc.returncode is not None else 0
-    print(f"\nEl server termino (exit code {code}).")
+    print(f"\nThe server exited (exit code {code}).")
     _kill_tree(proc.pid)
     sys.exit(code)
 

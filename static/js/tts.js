@@ -22,7 +22,7 @@ let wordTrack = null; // {item, t0, last}
 function updateChipDebug() {
   const chip = document.getElementById("tts-chip");
   if (chip)
-    chip.title = `TTS · ok: ${chunksOk} · descartados: ${chunksDropped} · cola: ${player ? player.pendingCount : 0}`;
+    chip.title = `TTS · ok: ${chunksOk} · dropped: ${chunksDropped} · queue: ${player ? player.pendingCount : 0}`;
 }
 
 // Persona cuyo audio suena AHORA (null = cola vacia). Las cards de la
@@ -86,7 +86,7 @@ function ensureCtx() {
   ctx.resume();
   if (ctx.state === "suspended" && !audioHinted) {
     audioHinted = true;
-    toast("El navegador bloqueó el audio; tocá el chip TTS para habilitarlo", "error");
+    toast("The browser blocked the audio; click the TTS chip to enable it", "error");
   }
   return ctx;
 }
@@ -241,7 +241,7 @@ export function feedAudioChunk(ev) {
 export function playChunksB64(chunks, persona) {
   if (!chunks || !chunks.length) return;
   if (!ttsReady()) {
-    toast("TTS no está activo", "error");
+    toast("TTS is not active", "error");
     return;
   }
   console.info(`[tts] play all: ${chunks.length} oraciones → cola (en orden)`);
@@ -263,7 +263,7 @@ export function playChunksB64(chunks, persona) {
 // no re-sintetiza, suena al instante por la misma cola de decodificacion.
 export function playChunkB64(b64, persona, extra) {
   if (!ttsReady()) {
-    toast("TTS no está activo", "error");
+    toast("TTS is not active", "error");
     return;
   }
   console.info(`[tts] botón de oración: ${b64.length} chars b64 → decodificar`);
@@ -280,12 +280,12 @@ export function onTTSEvent(ev) {
   if (ev.state === "on") ensureCtx();
   else if (ev.state === "stopped") stopLocal();
   else if (ev.state === "error")
-    toast(`TTS: ${ev.failed ?? "?"} oración(es) no se pudieron sintetizar`, "error");
+    toast(`TTS: ${ev.failed ?? "?"} sentence(s) could not be synthesized`, "error");
 }
 
 export async function replayTTS(text, persona) {
   if (!ttsReady()) {
-    toast("TTS no está activo", "error");
+    toast("TTS is not active", "error");
     return false;
   }
   console.info(`[tts] replay burbuja (${persona}): ${text.length} chars → /api/tts/speak`);
@@ -307,7 +307,7 @@ export async function replayTTS(text, persona) {
       return false;
     }
     if (!ttsReady()) {
-      toast("TTS no está activo", "error");
+      toast("TTS is not active", "error");
       return false;
     }
     ensureCtx();
@@ -324,7 +324,7 @@ export async function replayTTS(text, persona) {
     decodeAndEnqueue(bytes.buffer, persona, { words });
     return true;
   } catch (err) {
-    toast(err && err.message ? err.message : "Error al reproducir", "error");
+    toast(err && err.message ? err.message : "Error playing", "error");
     return false;
   }
 }
@@ -336,8 +336,8 @@ function setChip(st) {
     "tts-chip" + (st === "active" ? " active" : st === "loading" ? " loading" : st === "error" ? " error" : "");
   label.textContent = {
     off: "TTS · off",
-    loading: "TTS · cargando…",
-    active: "TTS · listo",
+    loading: "TTS · loading…",
+    active: "TTS · ready",
     error: "TTS · error",
   }[st];
 }
@@ -364,7 +364,7 @@ function applyStatus() {
       // colgado 120s y el guard de onChip tragaba todos los clicks.
       pendingEnable = false;
       clearWatchdog();
-      toast("TTS no pudo arrancar; revisá logs/tts-server (ultimo archivo)", "error");
+      toast("TTS could not start; check logs/tts-server (latest file)", "error");
     }
   }
 
@@ -385,8 +385,8 @@ function applyStatus() {
   pauseBtn.disabled = !ready;
   stopBtn.disabled = !ready;
   pauseBtn.querySelector("i").className = "ti " + (paused ? "ti-player-play" : "ti-player-pause");
-  pauseBtn.title = paused ? "Reanudar" : "Pausar";
-  pauseBtn.setAttribute("aria-label", paused ? "Reanudar TTS" : "Pausar TTS");
+  pauseBtn.title = paused ? "Resume" : "Pause";
+  pauseBtn.setAttribute("aria-label", paused ? "Resume TTS" : "Pause TTS");
 
   window.dispatchEvent(new CustomEvent("tts:status", { detail: { ready } }));
 }
@@ -413,7 +413,7 @@ async function enableTTS() {
       watchdog = null;
       const server = state.tts && state.tts.engine && state.tts.engine.server;
       if (!server || server.status !== "ready") {
-        toast("TTS no quedó listo a tiempo; se desactiva", "error");
+        toast("TTS was not ready in time; turning off", "error");
         try {
           await api("/api/tts/disable", { method: "POST" });
         } catch {
@@ -423,7 +423,7 @@ async function enableTTS() {
     }, 300000); // backstop: el cold start completo (spawn + health 15s + /load 120s + ready poll)
     // puede llegar a ~140s; con 120s el watchdog mataba cargas lentas legítimas
   } catch (err) {
-    toast(err.message || "Error al encender el TTS", "error");
+    toast(err.message || "Error turning on TTS", "error");
     setChip("error");
   }
 }
@@ -436,7 +436,7 @@ async function disableTTS() {
     await api("/api/tts/disable", { method: "POST" });
     stopLocal();
   } catch (err) {
-    toast(err.message || "Error al apagar el TTS", "error");
+    toast(err.message || "Error turning off TTS", "error");
     setChip("error");
   }
 }
@@ -478,7 +478,7 @@ async function onPause() {
     }
     applyStatus();
   } catch (err) {
-    toast(err.message || "Error en el control de TTS", "error");
+    toast(err.message || "Error in the TTS control", "error");
     poll();
   }
 }
@@ -489,7 +489,7 @@ async function onStop() {
     await api("/api/tts/stop", { method: "POST" });
     stopLocal();
   } catch (err) {
-    toast(err.message || "Error al detener el TTS", "error");
+    toast(err.message || "Error stopping TTS", "error");
   }
   poll();
 }

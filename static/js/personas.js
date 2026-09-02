@@ -49,7 +49,7 @@ function renderSidebarMain(list) {
   if (state.personas.length === 0) {
     const empty = document.createElement("div");
     empty.className = "list-empty";
-    empty.textContent = "Sin personas — subí un .wav";
+    empty.textContent = "No personas — upload a .wav";
     list.appendChild(empty);
     return;
   }
@@ -83,7 +83,7 @@ function renderSidebarRoom(list) {
   if (vis.length === 0) {
     const empty = document.createElement("div");
     empty.className = "list-empty";
-    empty.textContent = "Sin personas en esta room — asígalas desde el ícono de personas de la room";
+    empty.textContent = "No personas in this room — assign them from the room's personas icon";
     list.appendChild(empty);
     return;
   }
@@ -157,13 +157,13 @@ function personaRow(p, draggable = false, pinned = false) {
   if (p.tts_capable) {
     const vol = document.createElement("i");
     vol.className = "ti ti-volume pc-vol";
-    vol.title = "Con voz TTS";
+    vol.title = "With TTS voice";
     actions.appendChild(vol);
   }
   const editBtn = document.createElement("button");
   editBtn.className = "pc-btn";
-  editBtn.title = "Editar persona";
-  editBtn.setAttribute("aria-label", "Editar " + p.name);
+  editBtn.title = "Edit persona";
+  editBtn.setAttribute("aria-label", "Edit " + p.name);
   const ei = document.createElement("i");
   ei.className = "ti ti-pencil";
   editBtn.appendChild(ei);
@@ -213,13 +213,13 @@ function folderRow(entry, isCollapsed) {
   } else {
     const label = document.createElement("span");
     label.className = "persona-folder-name";
-    label.textContent = entry.name || "nueva carpeta";
+    label.textContent = entry.name || "new folder";
     row.appendChild(label);
 
     const renameBtn = document.createElement("button");
     renameBtn.className = "persona-edit folder-btn";
-    renameBtn.title = "Renombrar carpeta";
-    renameBtn.setAttribute("aria-label", "Renombrar carpeta " + (entry.name || "nueva"));
+    renameBtn.title = "Rename folder";
+    renameBtn.setAttribute("aria-label", "Rename folder " + (entry.name || "new"));
     renameBtn.innerHTML = '<i class="ti ti-pencil"></i>';
     renameBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -229,8 +229,8 @@ function folderRow(entry, isCollapsed) {
 
     const delBtn = document.createElement("button");
     delBtn.className = "persona-edit folder-btn folder-del";
-    delBtn.title = "Borrar carpeta";
-    delBtn.setAttribute("aria-label", "Borrar carpeta " + (entry.name || "nueva"));
+    delBtn.title = "Delete folder";
+    delBtn.setAttribute("aria-label", "Delete folder " + (entry.name || "new"));
     delBtn.innerHTML = '<i class="ti ti-trash"></i>';
     delBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -300,7 +300,7 @@ function commitFolderRename(input, oldName, isNew) {
   try {
     state.personaLayout = layout.renameFolder(state.personaLayout, oldName, next);
   } catch {
-    toast("Ya existe una carpeta llamada «" + next + "»", "error");
+    toast("A folder named «" + next + "» already exists", "error");
     renderSidebar();
     return;
   }
@@ -312,7 +312,7 @@ function deleteFolder(name) {
   const entry = state.personaLayout.find((e) => e.type === "folder" && e.name === name);
   if (!entry) return;
   const n = entry.personas.length;
-  if (n > 0 && !window.confirm("¿Borrar la carpeta «" + name + "»? Sus " + n + " personas pasan al listado principal.")) return;
+  if (n > 0 && !window.confirm("Delete the folder «" + name + "»? Its " + n + " persona(s) move to the main list.")) return;
   state.personaLayout = layout.removeFolder(state.personaLayout, name);
   renderSidebar();
   saveLayout();
@@ -325,7 +325,7 @@ async function saveLayout() {
       body: { layout: state.personaLayout, columns: state.layoutColumns },
     });
   } catch (err) {
-    toast("No se pudo guardar el orden de carpetas: " + (err.message || err), "error");
+    toast("Could not save the folder order: " + (err.message || err), "error");
     await refreshPersonas();
   }
 }
@@ -739,7 +739,7 @@ function buildDropZone() {
   drop.className = "drop-zone";
   const up = document.createElement("i");
   up.className = "ti ti-upload";
-  drop.append(up, document.createTextNode("\nSoltá un .wav para agregar una persona"));
+  drop.append(up, document.createTextNode("\nDrop a .wav to add a persona"));
   wireDropZone(drop);
   return drop;
 }
@@ -754,7 +754,7 @@ function setDropBusy(busy, filename) {
       drop.textContent = "";
       const icon = document.createElement("i");
       icon.className = "ti ti-loader spinning";
-      drop.append(icon, document.createTextNode(`\nTranscribiendo «${filename}»… (ASR + LLM)`));
+      drop.append(icon, document.createTextNode(`\nTranscribing «${filename}»… (ASR + LLM)`));
     }
   }
 }
@@ -763,7 +763,7 @@ async function uploadWav(file) {
   if (uploading) return;
   if (draft) return;
   if (!/\.wav$/i.test(file.name)) {
-    toast("Solo se aceptan archivos .wav", "error");
+    toast("Only .wav files are accepted", "error");
     return;
   }
   uploading = true;
@@ -788,7 +788,7 @@ async function uploadWav(file) {
     draft = body;
     if (body.warning) toast(body.warning, "warning");
   } catch (err) {
-    toast(err.message || "Error al subir el .wav", "error");
+    toast(err.message || "Error uploading the .wav", "error");
   } finally {
     uploading = false;
     renderUploadPanel();
@@ -821,7 +821,7 @@ function buildForInstructRow() {
   const cb = document.createElement("input");
   cb.type = "checkbox";
   cb.checked = state.config.show_for_instruct !== false;
-  cb.title = "Mostrar u ocultar «For Instruct» en todo el app";
+  cb.title = "Show or hide «For Instruct» across the app";
   const body = document.createElement("span");
   body.className = "fi-body";
   const nameEl = document.createElement("span");
@@ -829,7 +829,7 @@ function buildForInstructRow() {
   nameEl.textContent = FOR_INSTRUCT;
   const sub = document.createElement("span");
   sub.className = "fi-sub";
-  sub.textContent = "Voz sin clonación — usa el instruct de la TTS";
+  sub.textContent = "Voice without cloning — uses the TTS instruct";
   body.append(nameEl, sub);
   row.append(cb, body);
   cb.addEventListener("change", () => toggleForInstruct(cb.checked));
@@ -842,7 +842,7 @@ async function toggleForInstruct(value) {
     state.config.show_for_instruct = res.value;
     await refreshPersonas();
   } catch (err) {
-    toast(err.message || "Error al guardar la visibilidad", "error");
+    toast(err.message || "Error saving the visibility", "error");
   }
   renderUploadPanel();
 }
@@ -856,7 +856,7 @@ function renderUploadPanel() {
     panel.appendChild(buildDropZone());
     const hint = document.createElement("div");
     hint.className = "pd-hint";
-    hint.textContent = "El nombre sale del archivo: <Nombre>.wav, <Nombre>_Eng.wav o <Nombre>_Latino.wav";
+    hint.textContent = "The name comes from the file: <Name>.wav, <Name>_Eng.wav or <Name>_Latino.wav";
     panel.appendChild(hint);
     return;
   }
@@ -893,14 +893,14 @@ function renderUploadPanel() {
 
   const persona = document.createElement("div");
   persona.className = "pd-section";
-  persona.appendChild(sectionLabel("Personaje"));
-  const descField = draftField("Descripción", draft.description, "pm-textarea");
+  persona.appendChild(sectionLabel("Character"));
+  const descField = draftField("Description", draft.description, "pm-textarea");
   const promptField = draftField("System prompt", draft.system_prompt, "pm-textarea tall");
   const genBtn = document.createElement("button");
   genBtn.className = "wav-btn";
   const gi = document.createElement("i");
   gi.className = "ti ti-refresh";
-  genBtn.append(gi, document.createTextNode(" Re-generar ficha"));
+  genBtn.append(gi, document.createTextNode(" Re-generate sheet"));
   genBtn.addEventListener("click", () => regenerateDraft(genBtn));
   const pactions = document.createElement("div");
   pactions.className = "transcript-actions";
@@ -910,11 +910,11 @@ function renderUploadPanel() {
 
   const transcript = document.createElement("div");
   transcript.className = "pd-section";
-  transcript.appendChild(sectionLabel("Transcripción"));
+  transcript.appendChild(sectionLabel("Transcript"));
   const box = document.createElement("textarea");
   box.className = "transcript-box";
   box.value = draft.transcript ?? "";
-  box.placeholder = "Sin transcripción";
+  box.placeholder = "No transcript";
   const reBtn = document.createElement("button");
   reBtn.className = "wav-btn";
   const ri = document.createElement("i");
@@ -931,11 +931,11 @@ function renderUploadPanel() {
   actions.className = "draft-actions";
   const cancel = document.createElement("button");
   cancel.className = "pm-btn danger";
-  cancel.textContent = "Cancelar";
+  cancel.textContent = "Cancel";
   cancel.addEventListener("click", rejectDraft);
   const ok = document.createElement("button");
   ok.className = "pm-btn primary";
-  ok.textContent = "Aceptar persona";
+  ok.textContent = "Accept persona";
   ok.addEventListener("click", acceptDraft);
   actions.append(ok, cancel);
   panel.appendChild(actions);
@@ -955,14 +955,14 @@ async function retranscribeDraft(btn, box) {
   btn.textContent = "";
   const icon = document.createElement("i");
   icon.className = "ti ti-loader spinning";
-  btn.append(icon, document.createTextNode(" Re-transcribiendo…"));
+  btn.append(icon, document.createTextNode(" Re-transcribing…"));
   try {
     const body = await api(`/api/personas/pending/${draft.token}/retranscribe`, { method: "POST" });
     draft.transcript = body.transcript ?? "";
     box.value = draft.transcript;
-    toast("Transcripción actualizada", "success");
+    toast("Transcript updated", "success");
   } catch (err) {
-    toast(err.message || "Error al re-transcribir", "error");
+    toast(err.message || "Error re-transcribing", "error");
   } finally {
     btn.disabled = false;
     btn.textContent = "";
@@ -978,7 +978,7 @@ async function regenerateDraft(btn) {
   btn.textContent = "";
   const icon = document.createElement("i");
   icon.className = "ti ti-loader spinning";
-  btn.append(icon, document.createTextNode(" Generando ficha…"));
+  btn.append(icon, document.createTextNode(" Generating sheet…"));
   try {
     const body = await api(`/api/personas/pending/${draft.token}/regenerate`, {
       method: "POST",
@@ -996,16 +996,16 @@ async function regenerateDraft(btn) {
       warning: body.warning,
     });
     if (body.warning) toast(body.warning, "warning");
-    else toast("Ficha re-generada", "success");
+    else toast("Sheet re-generated", "success");
     renderUploadPanel();
     draftEls.name.value = nameVal;
   } catch (err) {
-    toast(err.message || "Error al re-generar la ficha", "error");
+    toast(err.message || "Error re-generating the sheet", "error");
     btn.disabled = false;
     btn.textContent = "";
     const r = document.createElement("i");
     r.className = "ti ti-refresh";
-    btn.append(r, document.createTextNode(" Re-generar ficha"));
+    btn.append(r, document.createTextNode(" Re-generate sheet"));
   }
 }
 
@@ -1013,7 +1013,7 @@ async function acceptDraft() {
   if (!draft || !draftEls) return;
   const name = draftEls.name.value.trim();
   if (!name) {
-    toast("El nombre no puede estar vacío", "error");
+    toast("The name cannot be empty", "error");
     return;
   }
   draftEls.ok.disabled = true;
@@ -1028,13 +1028,13 @@ async function acceptDraft() {
         transcript: draftEls.box.value,
       },
     });
-    toast(`«${body.name}» creada`, "success");
+    toast(`«${body.name}» created`, "success");
     if (body.warning) toast(body.warning, "warning");
     draft = null;
     await refreshPersonas();
     renderUploadPanel();
   } catch (err) {
-    toast(err.message || "Error al aceptar la persona", "error");
+    toast(err.message || "Error accepting the persona", "error");
     draftEls.ok.disabled = false;
   }
 }
@@ -1078,8 +1078,8 @@ function buildModalShell(title) {
   titleEl.textContent = title;
   const x = document.createElement("button");
   x.className = "persona-modal-x";
-  x.title = "Cerrar";
-  x.setAttribute("aria-label", "Cerrar");
+  x.title = "Close";
+  x.setAttribute("aria-label", "Close");
   const xi = document.createElement("i");
   xi.className = "ti ti-x";
   x.appendChild(xi);
@@ -1101,7 +1101,7 @@ function buildModalFoot() {
   foot.className = "persona-modal-foot";
   const cancel = document.createElement("button");
   cancel.className = "pm-btn";
-  cancel.textContent = "Cancelar";
+  cancel.textContent = "Cancel";
   cancel.addEventListener("click", closePersonaModal);
   foot.appendChild(cancel);
   return { foot, cancel };
@@ -1113,10 +1113,10 @@ async function openPersonaModal(name) {
   try {
     p = await api("/api/personas/" + encodeURIComponent(name));
   } catch (err) {
-    toast(err.message || "Error al cargar la persona", "error");
+    toast(err.message || "Error loading the persona", "error");
     return;
   }
-  const { overlay, boxEl, body } = buildModalShell(`Editar «${p.name}»`);
+  const { overlay, boxEl, body } = buildModalShell(`Edit «${p.name}»`);
 
   const mkField = (label) => {
     const f = document.createElement("div");
@@ -1128,7 +1128,7 @@ async function openPersonaModal(name) {
     return f;
   };
 
-  const nameF = mkField("Nombre");
+  const nameF = mkField("Name");
   const nameInput = document.createElement("input");
   nameInput.className = "pm-input";
   nameInput.type = "text";
@@ -1136,7 +1136,7 @@ async function openPersonaModal(name) {
   nameInput.spellcheck = false;
   nameF.appendChild(nameInput);
 
-  const descF = mkField("Descripción");
+  const descF = mkField("Description");
   const descInput = document.createElement("textarea");
   descInput.className = "pm-textarea";
   descInput.value = p.description || "";
@@ -1164,7 +1164,7 @@ async function openPersonaModal(name) {
   colorWrap.append(colorInput, hexText);
   colorF.appendChild(colorWrap);
 
-  const voiceF = mkField("Voz de referencia");
+  const voiceF = mkField("Reference voice");
   const voiceRow = document.createElement("div");
   voiceRow.className = "wav-row";
   const ico = document.createElement("i");
@@ -1174,7 +1174,7 @@ async function openPersonaModal(name) {
   voiceRow.appendChild(ico);
   const wavName = document.createElement("span");
   wavName.className = "wav-name";
-  wavName.textContent = p.reference_audio ? p.reference_audio.split("/").pop() : "sin referencia de voz";
+  wavName.textContent = p.reference_audio ? p.reference_audio.split("/").pop() : "no reference voice";
   voiceRow.appendChild(wavName);
   const reBtn = document.createElement("button");
   reBtn.className = "wav-btn";
@@ -1185,25 +1185,25 @@ async function openPersonaModal(name) {
     reBtn.addEventListener("click", () => retranscribeModal(p, reBtn, trInput));
   } else {
     reBtn.disabled = true;
-    reBtn.title = "Sin referencia de voz";
+    reBtn.title = "No reference voice";
   }
   voiceRow.appendChild(reBtn);
   voiceF.appendChild(voiceRow);
 
-  const trF = mkField("Transcripción");
+  const trF = mkField("Transcript");
   const trInput = document.createElement("textarea");
   trInput.className = "pm-textarea tall";
   trInput.value = p.transcript ?? "";
-  trInput.placeholder = "Sin transcripción";
+  trInput.placeholder = "No transcript";
   trF.appendChild(trInput);
 
   // foto: preview (solo muestra) + botones explícitos de subir/quitar
-  const avF = mkField("Foto");
+  const avF = mkField("Photo");
   const avRow = document.createElement("div");
   avRow.className = "pm-avatar-row";
   const avWrap = document.createElement("div");
   avWrap.className = "pm-avatar-wrap";
-  avWrap.title = "Subir o arrastrar una imagen acá";
+  avWrap.title = "Upload or drag an image here";
   let avPrevEl = avatarEl(p, "pm-avatar");
   const badge = document.createElement("span");
   badge.className = "pm-avatar-badge";
@@ -1219,10 +1219,10 @@ async function openPersonaModal(name) {
   fileInput.hidden = true;
   const upBtn = document.createElement("button");
   upBtn.className = "pm-btn primary";
-  upBtn.textContent = "Subir foto";
+  upBtn.textContent = "Upload photo";
   const rmBtn = document.createElement("button");
   rmBtn.className = "pm-btn danger";
-  rmBtn.textContent = "Quitar";
+  rmBtn.textContent = "Remove";
   rmBtn.style.display = p.avatar_image ? "" : "none";
   avButtons.append(upBtn, rmBtn);
   avRow.append(avWrap, avButtons, fileInput);
@@ -1258,7 +1258,7 @@ async function openPersonaModal(name) {
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
     if (!f) return;
     if (f.type && !f.type.startsWith("image/")) {
-      toast("Solta una imagen (.png, .jpg, .webp o .gif)", "error");
+      toast("Drop an image (.png, .jpg, .webp or .gif)", "error");
       return;
     }
     openCropModal(p, f, refreshAvPrev);
@@ -1269,9 +1269,9 @@ async function openPersonaModal(name) {
       .then((body) => {
         p.avatar_image = body.avatar_image ?? null;
         refreshAvPrev();
-        toast("Foto quitada", "success");
+        toast("Photo removed", "success");
       })
-      .catch((err) => toast(err.message || "Error al quitar la foto", "error"))
+      .catch((err) => toast(err.message || "Error removing the photo", "error"))
       .finally(() => { rmBtn.disabled = false; });
   });
 
@@ -1280,7 +1280,7 @@ async function openPersonaModal(name) {
   const { foot } = buildModalFoot();
   const del = document.createElement("button");
   del.className = "pm-btn danger";
-  del.textContent = "Borrar";
+  del.textContent = "Delete";
   del.style.marginLeft = "auto";
   // persona-sistema: no se borra desde el modal (la salida es el toggle
   // del panel Añadir persona); si se borrara a mano, se re-crea en el arranque
@@ -1288,7 +1288,7 @@ async function openPersonaModal(name) {
   del.addEventListener("click", () => deletePersona(p, del));
   const save = document.createElement("button");
   save.className = "pm-btn primary";
-  save.textContent = "Guardar";
+  save.textContent = "Save";
   save.addEventListener("click", () =>
     savePersonaModal(p, { name: nameInput, desc: descInput, prompt: promptInput, color: colorInput, transcript: trInput }, save)
   );
@@ -1305,14 +1305,14 @@ async function retranscribeModal(p, btn, trInput) {
   btn.textContent = "";
   const icon = document.createElement("i");
   icon.className = "ti ti-loader spinning";
-  btn.append(icon, document.createTextNode(" Re-transcribiendo…"));
+  btn.append(icon, document.createTextNode(" Re-transcribing…"));
   try {
     const body = await api(`/api/personas/${encodeURIComponent(p.name)}/retranscribe`, { method: "POST" });
     p.transcript = body.transcript ?? "";
     trInput.value = p.transcript;
-    toast("Transcripción actualizada", "success");
+    toast("Transcript updated", "success");
   } catch (err) {
-    toast(err.message || "Error al re-transcribir", "error");
+    toast(err.message || "Error re-transcribing", "error");
   } finally {
     btn.disabled = false;
     btn.textContent = "";
@@ -1367,26 +1367,26 @@ async function savePersonaModal(p, els, saveBtn) {
       });
     }
     closePersonaModal();
-    toast("Persona actualizada", "success");
+    toast("Persona updated", "success");
     await refreshPersonas();
   } catch (err) {
-    toast(err.message || "Error al guardar la persona", "error");
+    toast(err.message || "Error saving the persona", "error");
     saveBtn.disabled = false;
   }
 }
 
 async function deletePersona(p, btn) {
-  if (!window.confirm(`¿Borrar «${p.name}»? Se pierde su voz de referencia.`)) return;
+  if (!window.confirm(`Delete «${p.name}»? Its reference voice will be lost.`)) return;
   btn.disabled = true;
   try {
     await api(`/api/personas/${encodeURIComponent(p.name)}`, { method: "DELETE" });
   } catch (err) {
-    toast(err.message || "Error al borrar la persona", "error");
+    toast(err.message || "Error deleting the persona", "error");
     btn.disabled = false;
     return;
   }
   closePersonaModal();
-  toast(`«${p.name}» borrada`, "success");
+  toast(`«${p.name}» deleted`, "success");
   if (Array.isArray(state.who)) {
     state.who = state.who.filter((n) => n !== p.name);
     if (state.who.length === 0) state.who = "router";
@@ -1430,11 +1430,11 @@ function uploadAvatarFile(p, data, filename, refresh, onDone) {
       }
       p.avatar_image = body.avatar_image ?? null;
       refresh();
-      toast("Foto actualizada", "success");
+      toast("Photo updated", "success");
       if (onDone) onDone();
     })
     .catch((err) => {
-      toast(err.message || "Error al subir la foto", "error");
+      toast(err.message || "Error uploading the photo", "error");
       if (onDone) onDone(err);
     });
 }
@@ -1446,7 +1446,7 @@ function openCropModal(p, file, refresh) {
   img.onload = () => buildCropModal(p, file, img, url, refresh);
   img.onerror = () => {
     URL.revokeObjectURL(url);
-    toast("No se pudo leer la imagen", "error");
+    toast("Could not read the image", "error");
   };
   img.src = url;
 }
@@ -1469,11 +1469,11 @@ function buildCropModal(p, file, img, url, refresh) {
   head.className = "crop-head";
   const title = document.createElement("div");
   title.className = "crop-title";
-  title.textContent = `Recortar foto de «${p.name}»`;
+  title.textContent = `Crop photo of «${p.name}»`;
   const x = document.createElement("button");
   x.className = "persona-modal-x";
-  x.title = "Cerrar";
-  x.setAttribute("aria-label", "Cerrar");
+  x.title = "Close";
+  x.setAttribute("aria-label", "Close");
   const xi = document.createElement("i");
   xi.className = "ti ti-x";
   x.appendChild(xi);
@@ -1493,16 +1493,16 @@ function buildCropModal(p, file, img, url, refresh) {
 
   const hint = document.createElement("div");
   hint.className = "crop-hint";
-  hint.textContent = "Rueda: zoom · Arrastrar: mover";
+  hint.textContent = "Wheel: zoom · Drag: move";
 
   const foot = document.createElement("div");
   foot.className = "crop-foot";
   const cancel = document.createElement("button");
   cancel.className = "pm-btn";
-  cancel.textContent = "Cancelar";
+  cancel.textContent = "Cancel";
   const apply = document.createElement("button");
   apply.className = "pm-btn primary";
-  apply.textContent = "Aplicar foto";
+  apply.textContent = "Apply photo";
   foot.append(cancel, apply);
 
   box.append(head, stage, hint, foot);
@@ -1571,7 +1571,7 @@ function buildCropModal(p, file, img, url, refresh) {
   apply.addEventListener("click", () => {
     apply.disabled = true;
     cancel.disabled = true;
-    apply.textContent = "Aplicando…";
+    apply.textContent = "Applying…";
     // el viewport [0,CROP_W]x[0,CROP_H] se mapea a [0,CROP_OUT_W]x[0,CROP_OUT_H];
     // la imagen vista es scale * (punto - centro) + (px,py) respecto al centro
     const kx = CROP_OUT_W / CROP_W;
@@ -1587,10 +1587,10 @@ function buildCropModal(p, file, img, url, refresh) {
     canvas.toBlob(
       (blob) => {
         if (!blob) {
-          toast("No se pudo generar la imagen", "error");
+          toast("Could not generate the image", "error");
           apply.disabled = false;
           cancel.disabled = false;
-          apply.textContent = "Aplicar foto";
+          apply.textContent = "Apply photo";
           return;
         }
         uploadAvatarFile(p, blob, "avatar.png", refresh, () => close());
@@ -1718,7 +1718,7 @@ function applyWhoFit() {
   });
   if (res.hidden.length > 0 && res.plusFits) {
     whoPlus.textContent = "+" + res.hidden.length;
-    whoPlus.title = "Mostrar ocultos";
+    whoPlus.title = "Show hidden";
     whoPlus.style.display = "";
     whoPlus.style.visibility = "visible";
   } else {
@@ -1766,11 +1766,11 @@ function openWhoModal() {
   head.className = "who-modal-head";
   const title = document.createElement("div");
   title.className = "who-modal-title";
-  title.textContent = "Elige quién responde";
+  title.textContent = "Choose who responds";
   const x = document.createElement("button");
   x.className = "who-modal-x";
-  x.title = "Cerrar";
-  x.setAttribute("aria-label", "Cerrar");
+  x.title = "Close";
+  x.setAttribute("aria-label", "Close");
   const xi = document.createElement("i");
   xi.className = "ti ti-x";
   x.appendChild(xi);

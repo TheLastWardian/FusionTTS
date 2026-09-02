@@ -567,7 +567,7 @@ async def chat(req: ChatRequest, request: Request):
         if bad:
             raise HTTPException(
                 status_code=400,
-                detail="persona(s) no disponible(s) en la room: " + ", ".join(bad),
+                detail="persona(s) not available in the room: " + ", ".join(bad),
             )
         req.who_answers = names
     state.cancel_event.clear()

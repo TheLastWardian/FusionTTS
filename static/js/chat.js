@@ -76,7 +76,7 @@ function addUserBubble(text, messageId, imageUrl) {
   body.className = "msg-body";
   const meta = document.createElement("div");
   meta.className = "msg-meta";
-  meta.textContent = "Tú";
+  meta.textContent = "You";
   const bubble = document.createElement("div");
   bubble.className = "msg-bubble";
   bubble.textContent = text;
@@ -87,7 +87,7 @@ function addUserBubble(text, messageId, imageUrl) {
     img.alt = "";
     bubble.appendChild(img);
   }
-  bubble.title = "Doble click para editar";
+  bubble.title = "Double click to edit";
   bubble.addEventListener("dblclick", () => beginMessageEdit(msg, bubble, messageId, state.room));
   const getText = () => {
     const first = bubble.firstChild;
@@ -251,7 +251,7 @@ function addSentenceSound(b, ev) {
     const all = document.createElement("button");
     all.className = "msg-sound-btn msg-sound-btn-all";
     all.title = "Play all";
-    all.setAttribute("aria-label", "Reproducir todo el mensaje en orden");
+    all.setAttribute("aria-label", "Play the whole message in order");
     const ai = document.createElement("i");
     ai.className = "ti ti-player-play-filled";
     all.appendChild(ai);
@@ -260,8 +260,8 @@ function addSentenceSound(b, ev) {
   }
   const btn = document.createElement("button");
   btn.className = "msg-sound-btn";
-  btn.title = ev.text || "Oración";
-  btn.setAttribute("aria-label", "Reproducir oración: " + (ev.text || ""));
+  btn.title = ev.text || "Sentence";
+  btn.setAttribute("aria-label", "Play sentence: " + (ev.text || ""));
   const ico = document.createElement("i");
   ico.className = "ti ti-player-play";
   btn.appendChild(ico);
@@ -318,17 +318,17 @@ export function tokenFooterTitle(tokens) {
 export function makeCopyButton(getText) {
   const copy = document.createElement("button");
   copy.className = "msg-act msg-act-copy";
-  copy.title = "Copiar";
-  copy.setAttribute("aria-label", "Copiar mensaje");
+  copy.title = "Copy";
+  copy.setAttribute("aria-label", "Copy message");
   const ci = document.createElement("i");
   ci.className = "ti ti-copy";
   copy.appendChild(ci);
   copy.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(getText());
-      toast("Copiado", "success");
+      toast("Copied", "success");
     } catch {
-      toast("No se pudo copiar", "error");
+      toast("Could not copy", "error");
     }
   });
   return copy;
@@ -363,9 +363,9 @@ export function makeReprocessButton(msgEl, bubbleEl, messageId, room, disabled =
   const btn = document.createElement("button");
   btn.className = "msg-act msg-act-reproc";
   btn.title = disabled
-    ? "Este mensaje ya está dentro del resumen de compactación (no se puede reprocesar)"
-    : "Reprocesar desde este mensaje (borra esto y todo lo que viene después)";
-  btn.setAttribute("aria-label", "Reprocesar desde este mensaje");
+    ? "This message is already inside the compaction summary (it cannot be reprocessed)"
+    : "Reprocess from this message (deletes this and everything after it)";
+  btn.setAttribute("aria-label", "Reprocess from this message");
   const ico = document.createElement("i");
   ico.className = "ti ti-refresh";
   btn.appendChild(ico);
@@ -380,18 +380,18 @@ export function makeReprocessButton(msgEl, bubbleEl, messageId, room, disabled =
 
 export async function reprocessFrom(msgEl, bubbleEl, messageId, room) {
   if (state.streaming) {
-    toast("Esperá a que termine la respuesta antes de reprocesar", "warning");
+    toast("Wait for the response to finish before reprocessing", "warning");
     return;
   }
   if (msgEl.querySelector(".msg-edit-ta")) {
-    toast("Guardá o cancelá la edición antes de reprocesar", "warning");
+    toast("Save or cancel the edit before reprocessing", "warning");
     return;
   }
   const first = bubbleEl.firstChild;
   const text =
     first && first.nodeType === Node.TEXT_NODE ? first.nodeValue.trim() : "";
   if (!text) {
-    toast("El mensaje no tiene texto para reprocesar", "warning");
+    toast("The message has no text to reprocess", "warning");
     return;
   }
   const url =
@@ -410,7 +410,7 @@ export async function reprocessFrom(msgEl, bubbleEl, messageId, room) {
   try {
     res = await post(false);
   } catch (err) {
-    toast("No se pudo reprocesar: " + (err && err.message ? err.message : String(err)), "error");
+    toast("Could not reprocess: " + (err && err.message ? err.message : String(err)), "error");
     return;
   }
   if (res.status === 409) {
@@ -422,13 +422,14 @@ export async function reprocessFrom(msgEl, bubbleEl, messageId, room) {
     } catch {}
     const info =
       n != null
-        ? "Hay " + n + " mensaje" + (n === 1 ? "" : "s") + " de usuario debajo; el rewind los borrará."
-        : "Hay mensajes debajo; el rewind los borrará.";
-    if (!confirm(info + "\n¿Reprocesar desde este mensaje?")) return;
+        ? "There " + (n === 1 ? "is" : "are") + " " + n + " user message" +
+          (n === 1 ? "" : "s") + " below; the rewind will delete them."
+        : "There are messages below; the rewind will delete them.";
+    if (!confirm(info + "\nReprocess from this message?")) return;
     try {
       res = await post(true);
     } catch (err) {
-      toast("No se pudo reprocesar: " + (err && err.message ? err.message : String(err)), "error");
+      toast("Could not reprocess: " + (err && err.message ? err.message : String(err)), "error");
       return;
     }
   }
@@ -524,7 +525,7 @@ function makeOnEvent(gen) {
     } else if (ev.type === "tts_state") {
       onTTSEvent(ev);
     } else if (ev.type === "error") {
-      toast(ev.message || "Error en el chat", "error");
+      toast(ev.message || "Chat error", "error");
       if (gen === streamGen) finishStream();
     } else if (ev.type === "text_done") {
       // el texto de la ronda termino: el boton vuelve a "enviar" aunque el
@@ -542,7 +543,7 @@ function makeOnEvent(gen) {
         .filter((t) => t.b && t.b.final);
       if (targets.length) attachSavedAudio(targets, state.room);
       if (gen === streamGen) {
-        if (ev.cancelled) toast("Chat cancelado", "info");
+        if (ev.cancelled) toast("Chat cancelled", "info");
         finishStream();
       }
       // la ronda quedo en el historial del server: contexto actualizado
@@ -611,7 +612,7 @@ async function doSend(text, messageId) {
     }
     if (gen === streamGen) finishStream();
   } catch (err) {
-    toast("Error de conexión: " + (err && err.message ? err.message : String(err)), "error");
+    toast("Connection error: " + (err && err.message ? err.message : String(err)), "error");
     if (gen === streamGen) finishStream();
   }
 }
@@ -621,7 +622,7 @@ export async function cancelChat() {
   try {
     await fetch("/api/chat/cancel", { method: "POST" });
   } catch (err) {
-    toast("No se pudo cancelar: " + (err && err.message ? err.message : String(err)), "error");
+    toast("Could not cancel: " + (err && err.message ? err.message : String(err)), "error");
   }
 }
 
@@ -630,13 +631,13 @@ function updateSendButton() {
   if (state.streaming) {
     btnSend.classList.add("cancel");
     btnSend.disabled = false;
-    btnSend.title = "Cancelar";
-    btnSend.setAttribute("aria-label", "Cancelar chat");
+    btnSend.title = "Cancel";
+    btnSend.setAttribute("aria-label", "Cancel chat");
     ico.className = "ti ti-x";
   } else {
     btnSend.classList.remove("cancel");
-    btnSend.title = "Enviar";
-    btnSend.setAttribute("aria-label", "Enviar mensaje");
+    btnSend.title = "Send";
+    btnSend.setAttribute("aria-label", "Send message");
     ico.className = "ti ti-send";
     btnSend.disabled = !ta.value.trim() && !pendingImage;
   }
@@ -645,7 +646,7 @@ function updateSendButton() {
 function onImageFile(file) {
   if (!file || !file.type.startsWith("image/")) return;
   if (file.size > 10 * 1024 * 1024) {
-    toast("Imagen muy grande (máx. 10 MB)", "error");
+    toast("Image too large (max. 10 MB)", "error");
     return;
   }
   pendingImage = file;
@@ -657,7 +658,7 @@ function onImageFile(file) {
   };
   reader.onerror = () => {
     pendingImage = null;
-    toast("No se pudo leer la imagen", "error");
+    toast("Could not read the image", "error");
   };
   reader.readAsDataURL(file);
 }
@@ -670,7 +671,7 @@ function renderImagePreview() {
   const rm = document.createElement("button");
   rm.type = "button";
   rm.className = "img-preview-remove";
-  rm.title = "Quitar imagen";
+  rm.title = "Remove image";
   rm.textContent = "\u2715";
   rm.addEventListener("click", clearPendingImage);
   imagePreviewEl.append(img, rm);

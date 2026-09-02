@@ -303,7 +303,7 @@ async def retranscribe_persona(request: Request, name: str) -> dict:
     if wav_path is None or not wav_path.is_file():
         raise HTTPException(
             status_code=400,
-            detail="la persona no tiene una referencia de voz (.wav) para re-transcribir",
+            detail="the persona has no reference voice (.wav) to re-transcribe",
         )
     try:
         transcript = await state.asr_manager.transcribe(
@@ -311,7 +311,7 @@ async def retranscribe_persona(request: Request, name: str) -> dict:
         )
     except ASRError as exc:
         detail = exc.detail if isinstance(exc, ASREngineError) else str(exc)
-        raise HTTPException(status_code=502, detail=f"ASR fallo: {detail}") from exc
+        raise HTTPException(status_code=502, detail=f"ASR failed: {detail}") from exc
 
     txt_rel = persona.get("reference_audio_transcript")
     txt_path = _resolve_audio_path(store, txt_rel)
@@ -323,7 +323,7 @@ async def retranscribe_persona(request: Request, name: str) -> dict:
         txt_path.parent.mkdir(parents=True, exist_ok=True)
         txt_path.write_text(transcript, encoding="utf-8")
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"error de archivo: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"file error: {exc}") from exc
     return {**_with_tts_capable(persona), "transcript": transcript}
 
 
@@ -337,13 +337,13 @@ async def update_transcript(request: Request, name: str, payload: TranscriptUpda
     if txt_path is None:
         raise HTTPException(
             status_code=400,
-            detail="la persona no tiene un path de transcripción (reference_audio_transcript)",
+            detail="the persona has no transcript path (reference_audio_transcript)",
         )
     try:
         txt_path.parent.mkdir(parents=True, exist_ok=True)
         txt_path.write_text(payload.transcript, encoding="utf-8")
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"error de archivo: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"file error: {exc}") from exc
     return {"transcript": payload.transcript}
 
 
@@ -402,13 +402,13 @@ async def upload_avatar(request: Request, name: str, file: UploadFile = File(...
     if suffix not in AVATAR_MEDIA_TYPES:
         raise HTTPException(
             status_code=400,
-            detail=f"formato de imagen no soportado: {suffix or 'sin extension'} (usa .png, .jpg, .webp o .gif)",
+            detail=f"unsupported image format: {suffix or 'no extension'} (use .png, .jpg, .webp or .gif)",
         )
     data = await file.read()
     if len(data) > AVATAR_MAX_BYTES:
         raise HTTPException(
             status_code=400,
-            detail=f"imagen demasiado pesada: {len(data) / 1024 / 1024:.1f}MB (maximo 15MB)",
+            detail=f"image too large: {len(data) / 1024 / 1024:.1f}MB (max 15MB)",
         )
     store.avatar_dir.mkdir(parents=True, exist_ok=True)
     target = store.avatar_dir / f"{name}{suffix}"
@@ -418,7 +418,7 @@ async def upload_avatar(request: Request, name: str, file: UploadFile = File(...
     try:
         target.write_bytes(data)
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"error de archivo: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"file error: {exc}") from exc
     updated = store.set_avatar(name, f"{store.avatar_dir.name}/{target.name}")
     return _with_tts_capable(updated)
 
@@ -446,7 +446,7 @@ async def get_avatar(request: Request, name: str) -> FileResponse:
         raise HTTPException(status_code=404, detail=f"persona not found: {name}")
     target = _resolve_avatar_file(store, persona.get("avatar_image"))
     if target is None or not target.is_file():
-        raise HTTPException(status_code=404, detail="la persona no tiene foto")
+        raise HTTPException(status_code=404, detail="the persona has no photo")
     return FileResponse(
         target, media_type=AVATAR_MEDIA_TYPES.get(target.suffix.lower(), "application/octet-stream")
     )
@@ -498,7 +498,7 @@ async def create_persona_from_audio(
 
     filename = Path(file.filename or "").name
     if not filename.lower().endswith(".wav"):
-        raise HTTPException(status_code=400, detail="solo se aceptan archivos .wav")
+        raise HTTPException(status_code=400, detail="only .wav files are accepted")
 
     parsed_name, parsed_language = parse_name_from_filename(filename)
     final_name = (name.strip() if name else "") or parsed_name
@@ -515,7 +515,7 @@ async def create_persona_from_audio(
     stem = sanitize_audio_stem(Path(filename).stem)
     if not stem:
         raise HTTPException(
-            status_code=400, detail="no se pudo derivar un nombre de archivo valido del filename"
+            status_code=400, detail="could not derive a valid filename from the audio filename"
         )
 
     pending_dir = _pending_dir()
@@ -529,7 +529,7 @@ async def create_persona_from_audio(
             transcript = await state.asr_manager.transcribe(wav_path, language=final_language)
         except ASRError as exc:
             detail = exc.detail if isinstance(exc, ASREngineError) else str(exc)
-            raise HTTPException(status_code=502, detail=f"ASR fallo: {detail}") from exc
+            raise HTTPException(status_code=502, detail=f"ASR failed: {detail}") from exc
         txt_path.write_text(transcript, encoding="utf-8")
 
         persona, generated, warning, persona_language = await _generate_persona(
@@ -576,7 +576,7 @@ async def accept_pending_persona(
     if draft is None:
         raise HTTPException(status_code=404, detail=f"draft not found: {token}")
     if store.get(payload.name) is not None:
-        raise HTTPException(status_code=409, detail=f"persona ya existe: {payload.name}")
+        raise HTTPException(status_code=409, detail=f"persona already exists: {payload.name}")
 
     base_stem = draft["stem"]
     audio_dir = store.audio_dir
@@ -647,12 +647,12 @@ async def retranscribe_pending_persona(request: Request, token: str) -> dict:
         transcript = await state.asr_manager.transcribe(wav_path, language=draft["language"])
     except ASRError as exc:
         detail = exc.detail if isinstance(exc, ASREngineError) else str(exc)
-        raise HTTPException(status_code=502, detail=f"ASR fallo: {detail}") from exc
+        raise HTTPException(status_code=502, detail=f"ASR failed: {detail}") from exc
     try:
         txt_path.parent.mkdir(parents=True, exist_ok=True)
         txt_path.write_text(transcript, encoding="utf-8")
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"error de archivo: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"file error: {exc}") from exc
     with state.pending_personas_lock:
         if token in state.pending_personas:
             state.pending_personas[token]["transcript"] = transcript
