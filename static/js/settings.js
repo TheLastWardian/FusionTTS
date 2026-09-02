@@ -58,6 +58,7 @@ const TTS_GROUPS = [
   {
     group: "TTS",
     items: [
+      { key: "omnivoice_dir", type: "text", label: "Ruta del repo de OmniVoice (vacío = sibling ..\\OmniVoice)", placeholder: "vacío = ..\\OmniVoice" },
       { key: "tts_mode", type: "select", options: ["sentences", "full"], label: "Modo de audio (por oraciones / bloque completo)" },
       { key: "tts_num_steps", type: "range", min: 1, max: 100, step: 1, kind: "int", label: "Steps" },
       { key: "tts_guidance_scale", type: "range", min: 0.1, max: 3, step: 0.1, kind: "float", label: "Guidance" },

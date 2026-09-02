@@ -35,12 +35,23 @@ def read_settings(path=None):
     return data
 
 
+def resolve_omnivoice_dir(settings, base=BASE):
+    raw = str(settings.get("omnivoice_dir") or "").strip()
+    if not raw:
+        return os.path.normpath(os.path.join(base, "..", "OmniVoice"))
+    if os.path.isabs(raw):
+        return os.path.normpath(raw)
+    return os.path.normpath(os.path.join(base, raw))
+
+
 def resolve_tts_python(settings, base=BASE):
     python = str(settings.get("tts_server_python") or "").strip()
     if python and os.path.exists(python):
         return os.path.normpath(python)
     default = os.path.normpath(
-        os.path.join(base, "..", "OmniVoice", "venv", "Scripts", "python.exe")
+        os.path.join(
+            resolve_omnivoice_dir(settings, base), "venv", "Scripts", "python.exe"
+        )
     )
     if os.path.exists(default):
         return default

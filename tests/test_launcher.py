@@ -68,5 +68,53 @@ def test_resolve_tts_python_none(tmp_path):
     assert launcher.resolve_tts_python({}, base=str(tmp_path / "missing2")) is None
 
 
+def test_resolve_omnivoice_dir_default_sibling(tmp_path):
+    base = tmp_path / "FusionTTS"
+    base.mkdir()
+    assert launcher.resolve_omnivoice_dir({}, base=str(base)) == str(tmp_path / "OmniVoice")
+    assert (
+        launcher.resolve_omnivoice_dir({"omnivoice_dir": ""}, base=str(base))
+        == str(tmp_path / "OmniVoice")
+    )
+
+
+def test_resolve_omnivoice_dir_absolute(tmp_path):
+    target = tmp_path / "OV"
+    assert (
+        launcher.resolve_omnivoice_dir({"omnivoice_dir": str(target)}, base=str(tmp_path / "x"))
+        == str(target)
+    )
+
+
+def test_resolve_omnivoice_dir_relative_to_base(tmp_path):
+    base = tmp_path / "FusionTTS"
+    base.mkdir()
+    assert (
+        launcher.resolve_omnivoice_dir({"omnivoice_dir": "..\\OV2"}, base=str(base))
+        == str(tmp_path / "OV2")
+    )
+
+
+def test_resolve_tts_python_from_custom_omnivoice_dir(tmp_path):
+    base = tmp_path / "FusionTTS"
+    base.mkdir()
+    py = tmp_path / "OV2" / "venv" / "Scripts" / "python.exe"
+    py.parent.mkdir(parents=True)
+    py.write_text("")
+    assert (
+        launcher.resolve_tts_python({"omnivoice_dir": "..\\OV2"}, base=str(base))
+        == str(py)
+    )
+
+
+def test_resolve_tts_python_custom_dir_missing(tmp_path):
+    base = tmp_path / "FusionTTS"
+    base.mkdir()
+    assert (
+        launcher.resolve_tts_python({"omnivoice_dir": "..\\OV-falta"}, base=str(base))
+        is None
+    )
+
+
 def test_wait_http_dead_port():
     assert launcher.wait_http("http://127.0.0.1:1/health", 1) is False

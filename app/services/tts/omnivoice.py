@@ -62,13 +62,25 @@ class OmniVoiceEngine:
         self._closed = False
         self._lock = asyncio.Lock()
 
+    def _omnivoice_dir(self) -> Path:
+        # Repo de OmniVoice: omnivoice_dir en settings (absoluto o relativo al
+        # repo de FusionTTS); vacio = carpeta sibling ..\OmniVoice (default).
+        raw = str(self._config.get("omnivoice_dir") or "").strip()
+        if not raw:
+            return paths.BASE_DIR.parent / "OmniVoice"
+        p = Path(raw).expanduser()
+        return p if p.is_absolute() else (paths.BASE_DIR / p).resolve()
+
     def _resolve_python(self) -> str:
         python = self._config.get("tts_server_python")
         if python:
             return python
-        default = paths.BASE_DIR.parent / "OmniVoice" / "venv" / "Scripts" / "python.exe"
+        default = self._omnivoice_dir() / "venv" / "Scripts" / "python.exe"
         if not default.exists():
-            raise TTSError(f"python del server TTS no encontrado: {default}")
+            raise TTSError(
+                f"python del server TTS no encontrado: {default} "
+                "(comprobar omnivoice_dir / tts_server_python en settings)"
+            )
         return str(default)
 
     def _base_url(self) -> str:
@@ -91,6 +103,15 @@ class OmniVoiceEngine:
             env["HF_HUB_OFFLINE"] = "1"
             env["OMNIVOICE_INT8"] = "1" if self._config.get("tts_int8") else "0"
             env["TTS_ALIGNMENT"] = str(self._config.get("tts_alignment"))
+            # `import omnivoice` resuelto directo del repo (PYTHONPATH), sin
+            # depender del editable install del venv: si el repo se mueve,
+            # alcanza con actualizar omnivoice_dir en settings
+            ov_dir = self._omnivoice_dir()
+            if ov_dir.exists():
+                existing = env.get("PYTHONPATH", "")
+                env["PYTHONPATH"] = (
+                    str(ov_dir) + os.pathsep + existing if existing else str(ov_dir)
+                )
             if self._proc_log is not None:
                 self._proc_log.close()
                 self._proc_log = None

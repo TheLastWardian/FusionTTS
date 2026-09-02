@@ -14,13 +14,15 @@ echo     Necesita: Python 3.11.x en PATH + INTERNET
 echo     (fastapi, uvicorn, httpx, faster-whisper, onnxruntime, ...)
 echo.
 echo [2] TTS server: NO instala nada.
-echo     Usa ..\OmniVoice\venv (carpeta sibling, ~5 GB, creada por el
-echo     setup de OmniVoice). Si no existe: solo una advertencia
-echo     (el app funciona, el TTS no).
+echo     Usa el venv del repo de OmniVoice (..\OmniVoice\venv por defecto,
+echo     ~5 GB, creado por el setup de OmniVoice). Si el repo esta en otra
+echo     ruta: setear "omnivoice_dir" en settings.json. Si no existe el venv:
+echo     solo una advertencia (el app funciona, el TTS no).
 echo.
 echo [3] settings.json: si no existe, copia settings.example.json.
-echo     Si tts_server_python esta vacio y existe el venv de OmniVoice,
-echo     lo rellena con la ruta (imprime el cambio). No toca el resto.
+echo     Si omnivoice_dir esta vacio lo rellena con ..\OmniVoice y si
+echo     tts_server_python esta vacio y existe el venv, lo rellena con la
+echo     ruta (imprime el cambio). No toca el resto.
 echo.
 echo [4] Opcional (pregunta [s/n]): pre-descarga del modelo ASR
 echo     Systran/faster-whisper-medium (~1.5 GB, INTERNET).
@@ -75,7 +77,7 @@ if not exist "settings.json" (
     copy /Y "settings.example.json" "settings.json" >nul
     echo   settings.json creado desde settings.example.json.
 )
-venv\Scripts\python.exe -c "import json,os; t=os.path.abspath(os.path.join('..','OmniVoice','venv','Scripts','python.exe')); p='settings.json'; d=json.load(open(p,encoding='utf-8')); v=d.get('tts_server_python') or ''; (d.update(tts_server_python=t), json.dump(d,open(p,'w',encoding='utf-8'),indent=2,ensure_ascii=False), print('  patch: tts_server_python =', t)) if (not v and os.path.exists(t)) else print('  tts_server_python: sin cambios')"
+venv\Scripts\python.exe -c "import json,os; p='settings.json'; d=json.load(open(p,encoding='utf-8')); ov=(d.get('omnivoice_dir') or '').strip() or os.path.abspath(os.path.join('..','OmniVoice')); t=os.path.join(ov,'venv','Scripts','python.exe'); ch=[]; (not (d.get('omnivoice_dir') or '').strip()) and (d.__setitem__('omnivoice_dir', ov), ch.append('omnivoice_dir='+ov)); (not (d.get('tts_server_python') or '').strip() and os.path.exists(t)) and (d.__setitem__('tts_server_python', os.path.abspath(t)), ch.append('tts_server_python='+os.path.abspath(t))); json.dump(d,open(p,'w',encoding='utf-8'),indent=2,ensure_ascii=False); [print('  patch:', c) for c in ch] if ch else print('  omnivoice_dir / tts_server_python: sin cambios')"
 echo.
 
 echo [4/4] Pre-descarga del modelo ASR (opcional)...

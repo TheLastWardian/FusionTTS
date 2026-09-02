@@ -1,4 +1,5 @@
 import asyncio
+import os
 import socket
 import sys
 import time
@@ -47,6 +48,7 @@ async def health():
         "env": {
             "HF_HUB_OFFLINE": os.getenv("HF_HUB_OFFLINE"),
             "PORT": os.getenv("PORT"),
+            "PYTHONPATH": os.getenv("PYTHONPATH"),
         },
     }
 
@@ -414,3 +416,48 @@ async def test_19_synthesize_retry_uses_random_seed(make_engine, monkeypatch):
     calls = (await _get(port, "/calls"))["calls"]
     assert calls[0]["seed"] == 424242
     assert calls[1]["seed"] is None
+
+
+async def test_20_spawn_pythonpath_from_omnivoice_dir(make_engine, tmp_path):
+    ov = tmp_path / "OV"
+    ov.mkdir()
+    engine, config = make_engine(omnivoice_dir=str(ov))
+    await engine.spawn()
+    health = await _get(config.get("tts_server_port"), "/health")
+    pp = health["env"]["PYTHONPATH"] or ""
+    assert pp.split(os.pathsep)[0] == str(ov)
+
+
+async def test_21_omnivoice_dir_resolution(tmp_path):
+    config = ConfigStore(settings_path=tmp_path / "settings_ovdir.json")
+    engine = OmniVoiceEngine(config)
+    # vacio = sibling (default legacy)
+    assert engine._omnivoice_dir() == paths.BASE_DIR.parent / "OmniVoice"
+    # absoluto: se usa tal cual
+    config.set("omnivoice_dir", str(tmp_path / "OV"))
+    assert engine._omnivoice_dir() == tmp_path / "OV"
+    # relativo: contra el repo de FusionTTS
+    config.set("omnivoice_dir", "subdir\\OV")
+    assert engine._omnivoice_dir() == (paths.BASE_DIR / "subdir" / "OV").resolve()
+    await engine.close()
+
+
+async def test_22_resolve_python_from_omnivoice_dir(tmp_path):
+    ov = tmp_path / "OV"
+    py = ov / "venv" / "Scripts" / "python.exe"
+    py.parent.mkdir(parents=True)
+    py.write_text("")
+    config = ConfigStore(settings_path=tmp_path / "settings_ovpy.json")
+    config.set("omnivoice_dir", str(ov))
+    engine = OmniVoiceEngine(config)
+    assert engine._resolve_python() == str(py)
+    await engine.close()
+
+
+async def test_23_resolve_python_missing_raises(tmp_path):
+    config = ConfigStore(settings_path=tmp_path / "settings_ovmissing.json")
+    config.set("omnivoice_dir", str(tmp_path / "no-existe"))
+    engine = OmniVoiceEngine(config)
+    with pytest.raises(TTSError, match="python del server TTS"):
+        engine._resolve_python()
+    await engine.close()

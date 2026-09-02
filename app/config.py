@@ -57,6 +57,10 @@ DEFAULTS: dict = {
     "tts_instruct": "",
     "tts_sentence_timeout": 45,
     "silence_ms": 80,
+    # Ruta al repo de OmniVoice (donde esta el paquete + el venv). Vacio =
+    # carpeta sibling ..\OmniVoice (layout default). El app le mete PYTHONPATH
+    # al spawn del server TTS para importar el paquete directo del repo.
+    "omnivoice_dir": "",
     "tts_server_python": "",
     "tts_server_port": 5500,
     "tts_int8": False,
@@ -93,6 +97,7 @@ SPECS: dict[str, KeySpec] = {
     "tts_instruct": KeySpec("str"),
     "tts_sentence_timeout": KeySpec("int", 5, 300),
     "silence_ms": KeySpec("int", 0, 1000),
+    "omnivoice_dir": KeySpec("str"),
     "tts_server_python": KeySpec("str"),
     "tts_server_port": KeySpec("int", 1024, 65535),
     "tts_int8": KeySpec("bool"),
