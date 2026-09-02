@@ -55,6 +55,17 @@ function roomRow(r) {
     e.stopPropagation();
     toggleEcho(r.name);
   });
+  const auto = document.createElement("button");
+  auto.className = "room-auto" + (r.auto_chat ? " on" : "");
+  auto.title =
+    "Auto-chat: la room conversa sola (el router decide quien sigue hablando)";
+  const ai = document.createElement("i");
+  ai.className = "ti ti-refresh";
+  auto.appendChild(ai);
+  auto.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleAutoChat(r.name);
+  });
   const personas = document.createElement("button");
   personas.className = "room-personas";
   personas.title = "Personajes de la room";
@@ -75,7 +86,7 @@ function roomRow(r) {
     e.stopPropagation();
     deleteRoom(r.name);
   });
-  row.append(b, echo, personas, del);
+  row.append(b, echo, auto, personas, del);
   return row;
 }
 
@@ -108,6 +119,7 @@ async function toggleEcho(name) {
         name: r.name,
         persona_names: r.persona_names,
         echo_chamber: !r.echo_chamber,
+        auto_chat: r.auto_chat ?? false,
       },
     });
     Object.assign(r, updated);
@@ -115,6 +127,27 @@ async function toggleEcho(name) {
     toast("Echo chamber " + (r.echo_chamber ? "ON" : "OFF") + ": " + r.name, "info");
   } catch (err) {
     toast(err.message || "Error al cambiar echo chamber", "error");
+  }
+}
+
+async function toggleAutoChat(name) {
+  const r = state.rooms.find((x) => x.name === name);
+  if (!r) return;
+  try {
+    const updated = await api("/api/rooms/" + encodeURIComponent(name), {
+      method: "PUT",
+      body: {
+        name: r.name,
+        persona_names: r.persona_names,
+        echo_chamber: r.echo_chamber ?? false,
+        auto_chat: !(r.auto_chat ?? false),
+      },
+    });
+    Object.assign(r, updated);
+    renderRooms();
+    toast("Auto-chat " + (r.auto_chat ? "ON" : "OFF") + ": " + r.name, "info");
+  } catch (err) {
+    toast(err.message || "Error al cambiar auto-chat", "error");
   }
 }
 
@@ -413,7 +446,7 @@ async function saveRoomPersonas(name, checks) {
   try {
     const updated = await api("/api/rooms/" + encodeURIComponent(name), {
       method: "PUT",
-      body: { name: r.name, persona_names: names, echo_chamber: r.echo_chamber },
+      body: { name: r.name, persona_names: names, echo_chamber: r.echo_chamber, auto_chat: r.auto_chat ?? false },
     });
     Object.assign(r, updated);
     closeRoomModal();

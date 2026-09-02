@@ -48,7 +48,12 @@ def test_list_empty(client):
 def test_create_room_persists_yaml(client, tmp_path):
     seed_persona(client, "Jean")
     seed_persona(client, "Fischl")
-    body = {"name": "test", "persona_names": ["Jean", "Fischl"], "echo_chamber": True}
+    body = {
+        "name": "test",
+        "persona_names": ["Jean", "Fischl"],
+        "echo_chamber": True,
+        "auto_chat": False,
+    }
     r = client.post("/api/rooms", json=body)
     assert r.status_code == 201
     assert r.json() == body
@@ -121,7 +126,12 @@ def test_update_room(client):
         "/api/rooms",
         json={"name": "test", "persona_names": ["Jean"], "echo_chamber": False},
     )
-    body = {"name": "test", "persona_names": ["Jean", "Fischl"], "echo_chamber": True}
+    body = {
+        "name": "test",
+        "persona_names": ["Jean", "Fischl"],
+        "echo_chamber": True,
+        "auto_chat": False,
+    }
     r = client.put("/api/rooms/test", json=body)
     assert r.status_code == 200
     assert r.json() == body

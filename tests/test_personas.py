@@ -141,7 +141,14 @@ def test_delete_cascades_to_rooms_and_audio(client, tmp_path):
     assert fischl_wav.exists()
 
     rooms = client.get("/api/rooms").json()["rooms"]
-    assert rooms == [{"name": "test", "persona_names": ["Fischl"], "echo_chamber": False}]
+    assert rooms == [
+        {
+            "name": "test",
+            "persona_names": ["Fischl"],
+            "echo_chamber": False,
+            "auto_chat": False,
+        }
+    ]
 
 
 def test_yaml_roundtrip_preserves_fields(tmp_path):

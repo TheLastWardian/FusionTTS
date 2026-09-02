@@ -39,6 +39,7 @@ const LLM_GROUPS = [
     group: "General",
     items: [
       { key: "max_persona_replies", type: "range", min: 1, max: 5, step: 1, kind: "int", label: "Max replies" },
+      { key: "auto_chat_max_turns", type: "range", min: 1, max: 100, step: 1, kind: "int", label: "Auto-chat turns (por mensaje)" },
       { key: "max_context_turns", type: "range", min: 0, max: 500, step: 1, kind: "int", label: "Context turns" },
       { key: "persona_name_mentions", type: "toggle", label: "Menciones por nombre" },
     ],

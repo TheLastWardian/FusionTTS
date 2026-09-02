@@ -44,7 +44,14 @@ class LLMClient:
     def _base_url(self) -> str:
         return str(self._config.get("llm_base_url")).rstrip("/")
 
-    def _build_body(self, messages: list[dict], stream: bool, max_tokens: int | None = None, temperature: float | None = None) -> dict:
+    def _build_body(
+        self,
+        messages: list[dict],
+        stream: bool,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        chat_template_kwargs: dict | None = None,
+    ) -> dict:
         body: dict = {
             "messages": messages,
             "stream": stream,
@@ -59,15 +66,33 @@ class LLMClient:
         model = self._config.get("llm_model")
         if model:
             body["model"] = model
+        if chat_template_kwargs:
+            # llama.cpp lo acepta por request (ej: Qwen3 enable_thinking=false)
+            body["chat_template_kwargs"] = chat_template_kwargs
         if stream:
             # llama.cpp devuelve usage en el ultimo chunk del stream
             body["stream_options"] = {"include_usage": True}
         return body
 
-    async def chat(self, messages: list[dict], max_tokens: int | None = None, temperature: float | None = None) -> str:
+    async def chat(
+        self,
+        messages: list[dict],
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        chat_template_kwargs: dict | None = None,
+    ) -> str:
         url = self._base_url() + "/v1/chat/completions"
         try:
-            resp = await self._client.post(url, json=self._build_body(messages, stream=False, max_tokens=max_tokens, temperature=temperature))
+            resp = await self._client.post(
+                url,
+                json=self._build_body(
+                    messages,
+                    stream=False,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    chat_template_kwargs=chat_template_kwargs,
+                ),
+            )
             resp.raise_for_status()
             data = resp.json()
             choice = data["choices"][0]

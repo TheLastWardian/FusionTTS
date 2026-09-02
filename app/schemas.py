@@ -62,6 +62,7 @@ class Room(BaseModel):
     name: str
     persona_names: list[str]
     echo_chamber: bool
+    auto_chat: bool = False
 
 
 class SpeakRequest(BaseModel):

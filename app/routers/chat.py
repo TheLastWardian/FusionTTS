@@ -74,6 +74,16 @@ def _drain_sentences(buf: str) -> tuple[list[str], str]:
     return ready, buf[last_end:]
 
 
+# Nudge de los turnos de continuacion (auto-chat): el historial termina con una
+# linea de OTRO personaje; sin el nudge el modelo tiende a cerrar la escena o
+# a quedarse esperando al usuario
+_AUTO_CHAT_NUDGE = (
+    "\n\n[Continuation] The conversation continues among the characters with "
+    "no new input from the user. React to the last message and keep the scene "
+    "alive; do not wait for the user or wrap the scene up."
+)
+
+
 def _tokens_summary(usage_sink: list) -> dict | None:
     # Apelmaza usage/timings del chunk final del stream para el historial y
     # el pie de la burbuja. None si el server no envio usage.
@@ -266,7 +276,22 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
             # eco: aunque el router eligiera varias, solo habla la primera
             fixed = fixed[:1]
 
-        for index, persona_name in enumerate(fixed):
+        # auto-chat: cola dinamica de turnos (persona, es_continuacion). Tras
+        # cada turno el router (sin thinking) elige al siguiente hasta
+        # auto_chat_max_turns o hasta stop
+        auto_on = bool(
+            room is not None
+            and room.get("auto_chat")
+            and not echo
+            and fixed
+            and state.llm is not None
+        )
+        auto_budget = int(config.get("auto_chat_max_turns")) if auto_on else 0
+        turn_queue: list[tuple[str, bool]] = [(n, False) for n in fixed]
+        turn_index = 0
+        while turn_index < len(turn_queue):
+            persona_name, is_cont = turn_queue[turn_index]
+            turn_index += 1
             if state.cancel_event.is_set():
                 if tts_on:
                     await state.dispatcher.stop()
@@ -307,6 +332,8 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                     yield ev
             else:
                 system_prompt = build_system_prompt(config, persona)
+                if is_cont:
+                    system_prompt += _AUTO_CHAT_NUDGE
                 messages = build_llm_messages(
                     system_prompt,
                     persona_name,
@@ -314,7 +341,7 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                     config.get("max_context_turns"),
                     summary=room_store.load_summary(),
                 )
-                if index == 0 and description:
+                if turn_index == 1 and description:
                     for message in reversed(messages):
                         if message["role"] == "user":
                             message["content"] += f"\n\n[Attached image description: {description}]"
@@ -418,6 +445,36 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                     )
                 for ev in _drain_local():
                     yield ev
+
+            # auto-chat: solo cuando la cola se agoto (la ronda termino) el
+            # router elige al siguiente hablante; si queda presupuesto y no
+            # hay stop. Pool = la ronda menos el que acabo de hablar (con 1
+            # persona se sigue a si mismo). NADIE -> la cola no crece y termina.
+            if (
+                auto_on
+                and turn_index >= len(turn_queue)
+                and auto_budget > 0
+                and not state.cancel_event.is_set()
+            ):
+                last_msg = room_store.history[-1] if room_store.history else None
+                last_text = (last_msg or {}).get("text", "") or ""
+                if last_text.strip():
+                    pool = [n for n in fixed if n != persona_name] or list(fixed)
+                    try:
+                        nexts = await pick_personas(
+                            "router",
+                            last_text,
+                            pool,
+                            state.personas,
+                            state.llm,
+                            config,
+                            room_store.history,
+                        )
+                    except ValueError:
+                        nexts = []
+                    if nexts:
+                        turn_queue.append((nexts[0], True))
+                        auto_budget -= 1
 
         # Fin del texto de la ronda: el frontend devuelve el boton a "enviar"
         # aunque el TTS siga entregando audio (el boton es solo del LLM).

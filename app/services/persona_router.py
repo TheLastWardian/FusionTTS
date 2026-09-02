@@ -124,9 +124,9 @@ async def pick_personas(
 
     - "random": muestra aleatoria hasta max_persona_replies (comportamiento
       antiguo de caos explicito).
-    - "router": mención unica -> solo esa; si no, una llamada LLM (budget
-      1024: el modelo thinking puede pensar antes de nombrar) decide quien,
-      cuantos y el orden; NADIE -> []; inparseable/fallo -> 1 aleatoria.
+    - "router": mención unica -> solo esa; si no, una llamada LLM SIN thinking
+      (chat_template_kwargs enable_thinking=false) decide quien, cuantos y el
+      orden; NADIE -> []; inparseable/fallo -> 1 aleatoria.
     - nombre inexistente: fallback aleatorio (comportamiento antiguo).
     """
     if not eligible:
@@ -150,6 +150,9 @@ async def pick_personas(
         result = await llm.chat(
             build_router_prompt(user_message, eligible, personas, config, history),
             max_tokens=4096,
+            # clasificacion simple: sin thinking (llama.cpp + Qwen3 lo soporta
+            # por request); sin esto el router pensaba ~4s antes de nombrar
+            chat_template_kwargs={"enable_thinking": False},
         )
         chosen = parse_router_response(result, eligible, max_count)
         if chosen is not None:

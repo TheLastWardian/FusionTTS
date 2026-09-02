@@ -233,8 +233,9 @@ def test_router_uses_llm_with_hints(client, mock_llm):
     assert "NADIE" in system_prompt
     assert "One persona name per line" in system_prompt
     assert calls[0]["messages"][1] == {"role": "user", "content": "Who should respond?"}
-    # 4096: el modelo thinking puede gastar tokens en razonar antes del nombre
     assert calls[0]["max_tokens"] == 4096
+    # clasificacion sin thinking (llama.cpp + Qwen3: enable_thinking=false)
+    assert calls[0]["chat_template_kwargs"] == {"enable_thinking": False}
 
 
 def test_router_picks_multiple_in_order(client, mock_llm):
@@ -275,6 +276,146 @@ def test_router_nadie_no_replies(client, mock_llm):
     assert types == ["text_done", "complete"]
     assert len(non_stream_calls(mock_llm)) == 1
     assert mock_llm.stream_calls == 0
+
+
+# --- auto-chat: la room conversa sola (router sin thinking por turno) ---
+
+
+def _enable_auto_chat(client, room, max_turns):
+    r = next(x for x in client.get("/api/rooms").json()["rooms"] if x["name"] == room)
+    assert (
+        client.post("/api/config", json={"key": "auto_chat_max_turns", "value": max_turns}).status_code
+        == 200
+    )
+    assert (
+        client.put(
+            "/api/rooms/" + room,
+            json={
+                "name": r["name"],
+                "persona_names": r["persona_names"],
+                "echo_chamber": r["echo_chamber"],
+                "auto_chat": True,
+            },
+        ).status_code
+        == 200
+    )
+
+
+def test_auto_chat_continues_until_budget(client, mock_llm):
+    _enable_auto_chat(client, "test", 3)
+    mock_llm.chat_content = "Fischl"  # el router siempre dice Fischl
+    resp = client.post(
+        "/api/chat",
+        json={
+            "message": "hola",
+            "who_answers": ["Jean", "Fischl"],
+            "chat_room": "test",
+        },
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    personas = [e["persona"] for e in events if e["type"] == "start"]
+    # ronda inicial (Jean, Fischl) + 3 continuaciones = 5 turnos
+    assert len(personas) == 5
+    assert personas[0] == "Jean"
+    assert personas[1] == "Fischl"
+    # nunca el mismo hablante dos veces seguidas
+    assert all(a != b for a, b in zip(personas, personas[1:]))
+    assert events[-1] == {"type": "complete", "cancelled": False}
+    # 5 streams (uno por turno) y 3 llamadas de router (una por continuacion)
+    assert mock_llm.stream_calls == 5
+    router_calls = non_stream_calls(mock_llm)
+    assert len(router_calls) == 3
+    # el router va SIN thinking
+    assert all(
+        c.get("chat_template_kwargs") == {"enable_thinking": False} for c in router_calls
+    )
+
+
+def test_auto_chat_off_by_default_no_continuation(client, mock_llm):
+    mock_llm.chat_content = "Fischl"
+    resp = client.post(
+        "/api/chat",
+        json={
+            "message": "hola",
+            "who_answers": ["Jean", "Fischl"],
+            "chat_room": "test",
+        },
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    assert [e["persona"] for e in events if e["type"] == "start"] == ["Jean", "Fischl"]
+    assert mock_llm.stream_calls == 2
+    assert non_stream_calls(mock_llm) == []
+
+
+def test_auto_chat_echo_room_ignored(client, mock_llm):
+    _enable_auto_chat(client, "echo", 3)
+    resp = client.post(
+        "/api/chat",
+        json={"message": "hola eco", "who_answers": "random", "chat_room": "echo"},
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    assert [e["type"] for e in events] == [
+        "start",
+        "token",
+        "done",
+        "text_done",
+        "complete",
+    ]
+    assert mock_llm.calls == []
+
+
+def test_auto_chat_router_nadie_stops(client, mock_llm):
+    _enable_auto_chat(client, "test", 3)
+    mock_llm.chat_content = "NADIE"
+    resp = client.post(
+        "/api/chat",
+        json={
+            "message": "hola",
+            "who_answers": ["Jean", "Fischl"],
+            "chat_room": "test",
+        },
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    assert [e["persona"] for e in events if e["type"] == "start"] == ["Jean", "Fischl"]
+    assert len(non_stream_calls(mock_llm)) == 1
+    assert mock_llm.stream_calls == 2
+
+
+def test_auto_chat_cancel_stops(client, mock_llm):
+    _enable_auto_chat(client, "test", 5)
+    mock_llm.chat_content = "Fischl"
+    mock_llm.stream_responses = [[f"t{i:02d}" for i in range(50)]]
+    mock_llm.pace = 0.01
+
+    box = {}
+
+    def run():
+        box["resp"] = client.post(
+            "/api/chat",
+            json={
+                "message": "hola",
+                "who_answers": ["Jean", "Fischl"],
+                "chat_room": "test",
+            },
+        )
+
+    t = threading.Thread(target=run)
+    t.start()
+    time.sleep(0.2)
+    r = client.post("/api/chat/cancel")
+    assert r.status_code == 200
+    t.join(timeout=15)
+    assert not t.is_alive()
+
+    events = parse_events(box["resp"].text)
+    types = [e["type"] for e in events]
+    # el stop corto el stream: no se alcanzan los 7 turnos (2 + budget 5)
+    assert types.count("start") < 7
+    assert events[-1] == {"type": "complete", "cancelled": True}
 
 
 def test_router_unparseable_falls_back_to_random(client, mock_llm):
