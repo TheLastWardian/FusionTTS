@@ -198,16 +198,21 @@ function wrapSentenceWords(b) {
   if (pos < full.length) b.textEl.append(full.slice(pos));
   b.wordSpans = spans;
   // si el audio ya iba sonando al momento del re-render, restaurar el
-  // estado dorado (reproducidas + activa) sobre los spans nuevos
-  if (b.lastWord) {
-    const arr = spans.get(b.lastWord.sid);
-    if (arr) {
-      for (let i = 0; i < arr.length; i++) {
+  // estado dorado (reproducidas + activa) sobre los spans nuevos; el
+  // progreso es POR ORACION: re-renderizar no puede desdorar oraciones
+  // anteriores que ya terminaron de sonar
+  if (b.kwProgress) {
+    for (const [sid, maxW] of b.kwProgress) {
+      const arr = spans.get(sid);
+      if (!arr) continue;
+      for (let i = 0; i <= maxW && i < arr.length; i++) {
         if (!arr[i]) continue;
-        if (i < b.lastWord.w) arr[i].classList.add("kw-played");
-        else if (i === b.lastWord.w) arr[i].classList.add("kw-active");
+        const isActive = b.lastWord && b.lastWord.sid === sid && i === b.lastWord.w;
+        arr[i].classList.add(isActive ? "kw-active" : "kw-played");
       }
-      b.activeKw = arr[b.lastWord.w] || null;
+    }
+    if (b.lastWord) {
+      b.activeKw = (spans.get(b.lastWord.sid) || [])[b.lastWord.w] || null;
     }
   }
 }
@@ -766,6 +771,11 @@ export function initChat() {
     sp.classList.add("kw-active");
     b.activeKw = sp;
     b.lastWord = { sid: d.sentenceId, w: d.word };
+    // progreso dorado por oracion (para restaurar tras re-renders)
+    if (!b.kwProgress) b.kwProgress = new Map();
+    if (d.word > (b.kwProgress.get(d.sentenceId) ?? -1)) {
+      b.kwProgress.set(d.sentenceId, d.word);
+    }
   });
   updateSendButton();
 }
