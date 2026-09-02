@@ -165,6 +165,9 @@ class SynthesizeRequest(BaseModel):
     speed: float = DEFAULT_SPEED
     duration: float | None = DEFAULT_DURATION
     instruct: str = ""
+    # Karaoke: modo de alineacion forzada ("off" | "cpu" | "gpu"); vacio =
+    # default del env TTS_ALIGNMENT del server.
+    alignment: str = ""
 
 
 class SynthesizeResponse(BaseModel):
@@ -265,8 +268,9 @@ def _synthesize_sync(req: SynthesizeRequest) -> SynthesizeResponse:
 
     # Karaoke: alineacion forzada del texto sobre el audio generado. Corre
     # fuera del _infer_lock (no compite con la generacion) y nunca tumba el
-    # /synthesize: si falla, se responde sin words.
-    words = align_audio(audio_np, sr, req.text)
+    # /synthesize: si falla, se responde sin words. El modo lo pide el
+    # request (cambia al vuelo, sin reiniciar el server).
+    words = align_audio(audio_np, sr, req.text, req.alignment)
 
     return SynthesizeResponse(
         audio_base64=_audio_to_b64(audio_np, sr), sample_rate=sr, words=words

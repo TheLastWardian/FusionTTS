@@ -1,9 +1,11 @@
 """Alineacion forzada palabra a palabra (karaoke) para el server TTS.
 
 Modelo: facebook/wav2vec2-base-960h (CTC English, ~377 MB, Apache-2.0).
-Carga lazy en el primer /synthesize con alignment activo (env TTS_ALIGNMENT =
-"cpu" | "gpu"; "off" u otro valor = desactivado). Si no hay VRAM suficiente
-el modo "gpu" degrada a "cpu" con warning.
+El modo ("off" | "cpu" | "gpu") lo pide el request de /synthesize (campo
+`alignment`); si llega vacio/invalido cae al env TTS_ALIGNMENT (default).
+Carga lazy en el primer /synthesize con alignment activo y recarga solo si
+cambia el dispositivo (cpu<->gpu). Si no hay VRAM suficiente el modo "gpu"
+degrada a "cpu" con warning.
 
 El Viterbi es la implementacion numpy del tutorial oficial de torchaudio:
 el operador C++ torch.ops.torchaudio.forced_align de torchaudio 2.5.1 esta
@@ -39,6 +41,15 @@ def mode() -> str:
 
 def enabled() -> bool:
     return mode() != "off"
+
+
+def effective_mode(requested: str | None) -> str:
+    """Modo vigente para una llamada: el valor pedido por request gana;
+    vacio/invalido cae al default de env (TTS_ALIGNMENT)."""
+    r = (requested or "").strip().lower()
+    if r in ("off", "cpu", "gpu"):
+        return r
+    return mode()
 
 
 def viterbi_align(em: np.ndarray, tokens: np.ndarray) -> np.ndarray:
@@ -119,16 +130,14 @@ class Aligner:
         self._dtype = None
         self._broken = False
 
-    def _ensure(self) -> bool:
+    def _ensure(self, m: str) -> bool:
         if self._broken:
             return False
-        if self._model is not None:
-            return True
         import torch
         from transformers import AutoTokenizer, Wav2Vec2ForCTC
 
         torch_device = "cpu"
-        if mode() == "gpu" and torch.cuda.is_available():
+        if m == "gpu" and torch.cuda.is_available():
             free_b, _ = torch.cuda.mem_get_info()
             if free_b / 1e6 < MIN_FREE_VRAM_MB:
                 logger.warning(
@@ -137,6 +146,13 @@ class Aligner:
                 )
             else:
                 torch_device = "cuda"
+        if self._model is not None and self._device == torch_device:
+            return True
+        if self._model is not None:
+            # cambio de modo (cpu<->gpu) a mitad de sesion: se descarta el
+            # anterior para liberar VRAM/RAM antes de cargar el nuevo
+            logger.info("aligner: cambiando de %s a %s ...", self._device, torch_device)
+            self._model = None
         dtype = torch.float16 if torch_device == "cuda" else torch.float32
         logger.info("Cargando aligner %s en %s (%s) ...", MODEL_NAME, torch_device, dtype)
         tok = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -152,16 +168,24 @@ class Aligner:
         logger.info("Aligner listo (%s).", torch_device)
         return True
 
-    def align(self, audio_np: np.ndarray, sr: int, text: str) -> list[dict] | None:
-        """Alinea el texto sobre el audio. Devuelve
-        [{text, start_ms, end_ms}] o None (desactivado / sin palabras / fallo)."""
-        if not enabled():
+    def align(
+        self,
+        audio_np: np.ndarray,
+        sr: int,
+        text: str,
+        requested: str | None = None,
+    ) -> list[dict] | None:
+        """Alinea el texto sobre el audio. `requested` = modo pedido por el
+        request ("" / None = default de env). Devuelve [{text, start_ms,
+        end_ms}] o None (desactivado / sin palabras / fallo)."""
+        m = effective_mode(requested)
+        if m == "off":
             return None
         words = [w.strip(_PUNCT_STRIP) for w in text.split()]
         words = [w for w in words if w]
         if not words:
             return None
-        if not self._ensure():
+        if not self._ensure(m):
             return None
         try:
             import torch
@@ -197,5 +221,7 @@ class Aligner:
 _aligner = Aligner()
 
 
-def align_audio(audio_np: np.ndarray, sr: int, text: str) -> list[dict] | None:
-    return _aligner.align(audio_np, sr, text)
+def align_audio(
+    audio_np: np.ndarray, sr: int, text: str, requested: str | None = None
+) -> list[dict] | None:
+    return _aligner.align(audio_np, sr, text, requested)

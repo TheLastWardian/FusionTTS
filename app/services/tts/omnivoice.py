@@ -264,6 +264,10 @@ class OmniVoiceEngine:
                 "seed": seed if attempt == 1 else None,
                 "speed": cfg.get("tts_speed"),
                 "instruct": cfg.get("tts_instruct"),
+                # karaoke: se lee al vuelo (ConfigStore viva) para que cambiar
+                # tts_alignment en settings aplique desde la proxima oracion,
+                # sin reiniciar el server TTS
+                "alignment": cfg.get("tts_alignment"),
             }
             try:
                 resp = await self._client.post(url, json=body, timeout=timeout)

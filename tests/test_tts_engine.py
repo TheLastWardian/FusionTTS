@@ -216,6 +216,7 @@ async def test_05_synthesize_body_and_result(make_engine):
         "seed": None,
         "speed": 1.2,
         "instruct": "voz calmada",
+        "alignment": "off",
     }
 
 
