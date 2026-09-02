@@ -100,11 +100,6 @@ export function closeDrawers() {
   document.body.classList.remove("drawer-open-left", "drawer-open-right");
 }
 
-export function toggleLeftDrawer() {
-  if (!isNarrow()) return;
-  document.body.classList.toggle("drawer-open-left");
-}
-
 export function setRightTab(tab) {
   document.getElementById("tab-llm").classList.toggle("active", tab === "llm");
   document.getElementById("tab-tts").classList.toggle("active", tab === "tts");
@@ -224,7 +219,6 @@ export function initLayout() {
   initRoomsGutter();
   document.getElementById("btn-collapse-left").addEventListener("click", () => toggleCollapsed("left"));
   document.getElementById("btn-collapse-right").addEventListener("click", () => toggleCollapsed("right"));
-  document.getElementById("btn-menu").addEventListener("click", toggleLeftDrawer);
   document.getElementById("drawer-overlay").addEventListener("click", closeDrawers);
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeDrawers();

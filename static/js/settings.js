@@ -66,7 +66,7 @@ const TTS_GROUPS = [
       { key: "tts_seed", type: "number", min: 0, max: 4294967295, label: "Seed", placeholder: "vacío = aleatorio", nullable: true },
       { key: "tts_sentence_timeout", type: "range", min: 5, max: 300, step: 1, kind: "int", label: "Timeout", suffix: " s" },
       { key: "silence_ms", type: "range", min: 0, max: 1000, step: 10, kind: "int", label: "Silence", suffix: " ms" },
-      { key: "tts_alignment", type: "select", options: ["off", "cpu", "gpu"], label: "Resaltado de palabras (karaoke)" },
+      { key: "tts_alignment", type: "select", inline: true, options: ["off", "cpu", "gpu"], label: "Resaltado de palabras (karaoke)" },
     ],
   },
   {

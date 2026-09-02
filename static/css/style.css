@@ -127,8 +127,6 @@ body.resizing { user-select: none; -webkit-user-select: none; }
 #room-label { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 .tb-right { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
-.tb-menu { display: none; }
-
 .tts-chip {
   display: flex;
   align-items: center;
@@ -156,17 +154,18 @@ body.resizing { user-select: none; -webkit-user-select: none; }
 .tts-chip.loading .wb:nth-child(4), .tts-chip.active .wb:nth-child(4) { height: 7px; animation: wv 1s ease-in-out infinite .36s; }
 @keyframes wv { 0%,100%{transform:scaleY(.3)} 50%{transform:scaleY(1)} }
 
-.tts-controls { display: flex; align-items: center; gap: 2px; }
+.tts-controls { display: flex; align-items: center; gap: 6px; }
 .tts-btn {
   width: 28px; height: 28px;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent-border);
   background: var(--bg2);
-  color: var(--text-secondary);
+  color: var(--accent);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; font-size: 13px; transition: all .1s;
 }
-.tts-btn:hover { background: var(--bg3); color: var(--text-primary); }
+.tts-btn:hover { background: var(--accent-bg); }
+.tts-btn:disabled { opacity: .45; cursor: default; }
 
 .tb-icon {
   width: 30px; height: 30px;
@@ -200,7 +199,12 @@ body.resizing { user-select: none; -webkit-user-select: none; }
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--bg2);
 }
-.tb-icon-sm:hover { color: var(--danger); background: var(--danger-bg); }
+/* compactar: accion de contexto (acento, no rojo: no es destructiva) */
+#btn-compact { color: var(--accent); border-color: var(--accent-border); }
+#btn-compact:hover { color: var(--accent); background: var(--accent-bg); }
+/* borrar room: destructiva (rojo por defecto y al pasar) */
+#btn-clear-room { color: var(--danger); border-color: var(--danger-border); }
+#btn-clear-room:hover { color: var(--danger); background: var(--danger-bg); }
 .tb-icon.active-tab { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent); }
 
 /* ── Gutters (resize + colapso) ── */
@@ -811,7 +815,8 @@ body:not(.mode-narrow) .app.right-collapsed .right { display: none; }
 }
 .cfg-field textarea { font-family: var(--font); resize: vertical; line-height: 1.5; }
 .cfg-field select { font-family: var(--font); cursor: pointer; }
-.cfg-field-inline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* label + control en la misma linea, pegados (sin espacio intermedio) */
+.cfg-field-inline { display: flex; align-items: center; gap: 10px; }
 .cfg-field-inline label { margin-bottom: 0; white-space: nowrap; }
 .cfg-field-inline select { width: 68px; flex-shrink: 0; }
 /* instruct: labels en columna y selects todos del mismo ancho, alineados */
@@ -1099,7 +1104,6 @@ body.mode-narrow .app {
   min-height: 0;
 }
 body.mode-narrow .gutter { display: none; }
-body.mode-narrow .tb-menu { display: flex; }
 body.mode-narrow .tts-controls { display: none; }
 body.mode-narrow #room-label { max-width: 90px; }
 
