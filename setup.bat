@@ -34,13 +34,24 @@ if errorlevel 1 (
     echo Install Python 3.11 from python.org and check "Add python.exe to PATH".
     exit /b 1
 )
+for /f %%v in ('python -c "import sys; print('.'.join(map(str, sys.version_info[:2])))"') do set "PYVER=%%v"
+if "%PYVER%"=="3.11" goto pyver_ok
+echo.
+echo WARNING: this setup was only tested with Python 3.11, you have %PYVER%.
+echo The pinned packages may not install or run on this version.
+set /p "CONT=Continue anyway? [s/n] "
+if /i not "%CONT%"=="s" (
+    echo Cancelled. Install Python 3.11 from python.org and run setup again.
+    exit /b 0
+)
+:pyver_ok
 where git >nul 2>&1
 if errorlevel 1 (
     echo ERROR: git not found in PATH.
     echo Install git, e.g.: winget install --id Git.Git
     exit /b 1
 )
-echo   OK: python and git found.
+echo   OK: python %PYVER% and git found.
 echo.
 
 echo [1/6] App venv...
