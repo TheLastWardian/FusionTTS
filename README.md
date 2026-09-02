@@ -1,38 +1,105 @@
 # FusionTTS
 
-Chat multi-persona con TTS OmniVoice bajo demanda. "Recreación" de TalkWithMe con el corazón TTS de F5-TTS: modular, async, cero VRAM en idle.
+Multi-persona voice chat driven by a local LLM. Each persona is a character with its own
+system prompt and a cloned voice (zero-shot voice cloning with
+[OmniVoice](https://github.com/k2-fsa/OmniVoice), 600+ languages). The TTS server runs
+**on demand** (top-bar chip): 0 VRAM while it's off.
 
-## Estado
+## Architecture
 
-- [x] Plan de diseño (`FUSIONTTS_PLAN.md`)
-- [x] Plan de implementación (`IMPLEMENTATION_PLAN.md`)
-- [x] T0: git + esqueleto
-- [ ] T1–T20: ver `IMPLEMENTATION_PLAN.md`
+```
+Browser ──► FusionTTS app (FastAPI, port 8000)
+               ├─ LLM: any OpenAI-compatible endpoint (default http://localhost:8080)
+               ├─ ASR: faster-whisper (mic input, on demand)
+               └─ TTS server (tts-server/server.py, port 5500)
+                    └─ OmniVoice model (k2-fsa/OmniVoice)
+```
 
-## Requisitos
+- **App**: this repo. FastAPI backend + web UI (chat, personas, settings).
+- **TTS server**: a child process the app spawns when you enable TTS and kills when you
+  disable it, so VRAM is freed completely. It runs with the **OmniVoice repo's venv**.
+- **OmniVoice**: [k2-fsa/OmniVoice](https://github.com/k2-fsa/OmniVoice), cloned by the
+  setup into `..\OmniVoice` (sibling folder).
+- **LLM**: you manage it (llama.cpp / llama-server, or any OpenAI-compatible API).
 
-### Por PC
+## Requirements
 
 - Windows 10/11
-- Python 3.11.x en PATH (los venvs son 3.11.9)
-- GPU NVIDIA con CUDA para TTS/ASR (CPU funciona, lento)
-- Disco: app venv ≈ 2-3 GB + OmniVoice ≈ 5.2 GB + modelos ≈ 2 GB
-- LLM OpenAI-compatible en `:8080` (ejemplo: `llama-server -m <model.gguf> -c 4096 --port 8080`)
+- Python 3.11.x in PATH (python.org → check "Add python.exe to PATH")
+- git in PATH (e.g. `winget install --id Git.Git`)
+- Internet — only for the setup; runtime is fully offline
+- ~13 GB of disk: app venv ~1 GB + OmniVoice venv ~5 GB + models ~4.5 GB
+- NVIDIA GPU with CUDA 12.1 recommended; CPU works but is much slower
 
-### Qué se copia (portabilidad)
+## Install
 
-- `FusionTTS/` (repo completo: app, personas, rooms, settings)
-- `OmniVoice/` como carpeta sibling (venv + paquete `omnivoice`)
-- Caché HuggingFace (`%USERPROFILE%\.cache\huggingface`: `k2-fsa/OmniVoice` + `Systran/faster-whisper-medium`) o re-descarga con internet
+```bat
+setup.bat
+```
 
-### Qué necesita internet
+Interactive: it prints a manifest of everything it will download (with sizes) and asks
+for confirmation. Steps already present on disk are detected and skipped:
 
-- Solo `setup.bat` (pip) y el primer uso del modelo ASR (si no se pre-descargó)
-- En runtime: nada (offline-first; el TTS server corre con `HF_HUB_OFFLINE=1`)
+1. app venv + `requirements.txt`
+2. clone `https://github.com/k2-fsa/OmniVoice.git` → `..\OmniVoice`
+3. OmniVoice venv: `torch` cu121 + the `omnivoice` package + TTS server deps
+4. TTS model `k2-fsa/OmniVoice` (~3 GB, HuggingFace cache)
+5. (optional) pre-download of the ASR model `Systran/faster-whisper-medium` (~1.4 GB)
+6. `settings.json`: created from `settings.example.json` if missing, fills
+   `omnivoice_dir` / `tts_server_python`, touches nothing else
 
-### Uso
+Already have OmniVoice somewhere else? Clone it wherever you like and set `omnivoice_dir`
+in the settings panel (or in `settings.json`).
 
-1. `setup.bat` (primera vez; muestra un manifiesto y pide confirmación antes de tocar nada)
-2. Iniciar el LLM en `:8080`
-3. `start.bat`
-4. Navegador en `http://localhost:8000`
+## LLM
+
+The chat needs an OpenAI-compatible LLM. The default `llm_base_url` is
+`http://localhost:8080`:
+
+```bat
+llama-server -m C:\llama\models\your-model.gguf --port 8080 -c 4096 -ngl 99
+```
+
+## Usage
+
+1. Start your LLM (see above).
+2. `start.bat` → open `http://localhost:8000` in your browser.
+3. TTS: click the `TTS · off` chip in the top bar → the model loads (1-2 min) →
+   `TTS · listo`. Disabling TTS frees the VRAM.
+4. Voice input (ASR): use the mic in the chat; if you skipped step 5 of the setup,
+   the model downloads on first use.
+
+## Configuration
+
+- `settings.json` (auto-created from `settings.example.json`): LLM endpoint, TTS
+  parameters (steps, speed, language, instruct, word-by-word highlighting / karaoke,
+  `omnivoice_dir`), ASR model, context/echo-chamber options.
+- Settings panel in the UI (gear button): same values, no file editing needed.
+- `personas.yaml`: the cast — name, description, system prompt, reference audio for
+  voice cloning, avatar — plus the layout folders.
+- `personas_audio/`: one `.wav` + transcript `.txt` pair per persona (the cloning
+  reference).
+- `chatrooms.yaml`: rooms and which personas are in each.
+
+## Offline
+
+After the setup, the runtime needs no internet: the TTS server runs with
+`HF_HUB_OFFLINE=1` (models live in `%USERPROFILE%\.cache\huggingface`) and ASR uses the
+local cache. Only the LLM calls go out if you point `llm_base_url` at a remote API.
+
+## Tests
+
+```bat
+venv\Scripts\python -m pytest
+```
+
+## Troubleshooting
+
+- TTS chip stuck on `error` / never becomes ready: open the newest file in
+  `logs\tts-server\`. Common causes: missing OmniVoice venv or model, port 5500 busy.
+- Moved the OmniVoice repo? Update `omnivoice_dir` in the settings panel.
+- Ports 8000 / 8080 / 5500 busy: free them or change `tts_server_port` in
+  `settings.json`.
+- `start.bat` complains about a missing venv: run `setup.bat` first.
+- `setup.bat` stopped on a prerequisite: install the missing tool (Python 3.11 / git)
+  and run it again — it skips everything that is already done.
