@@ -19,6 +19,7 @@ class TTSChunk:
     text: str
     audio: bytes
     sample_rate: int
+    words: list | None = None
 
 
 class TTSDispatcher:
@@ -124,7 +125,15 @@ class TTSDispatcher:
             self._in_flight = False
             self._inflight_task = None
         await self._audio_q.put(
-            TTSChunk(sentence_id, message_id, persona, sentence, result.audio, result.sample_rate)
+            TTSChunk(
+                sentence_id,
+                message_id,
+                persona,
+                sentence,
+                result.audio,
+                result.sample_rate,
+                result.words,
+            )
         )
         self._completed += 1
 

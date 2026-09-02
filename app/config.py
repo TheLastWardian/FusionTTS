@@ -60,6 +60,7 @@ DEFAULTS: dict = {
     "tts_server_python": "",
     "tts_server_port": 5500,
     "tts_int8": False,
+    "tts_alignment": "off",
     "asr_model": "medium",
     "asr_device": "auto",
     "asr_timeout": 120,
@@ -95,6 +96,9 @@ SPECS: dict[str, KeySpec] = {
     "tts_server_python": KeySpec("str"),
     "tts_server_port": KeySpec("int", 1024, 65535),
     "tts_int8": KeySpec("bool"),
+    # Alineacion forzada por palabra (karaoke): off/cpu/gpu. Aplica en el
+    # proximo spawn del server TTS (igual que tts_int8).
+    "tts_alignment": KeySpec("str", allowed=("off", "cpu", "gpu")),
     "asr_model": KeySpec("str", allowed=("tiny", "base", "small", "medium", "large-v3")),
     "asr_device": KeySpec("str", allowed=("auto", "cuda", "cpu")),
     "asr_timeout": KeySpec("int", 10, 600),

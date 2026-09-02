@@ -110,6 +110,7 @@ def _audio_event(chunk) -> dict:
         "text": chunk.text,
         "sample_rate": chunk.sample_rate,
         "audio": base64.b64encode(chunk.audio).decode(),
+        "words": chunk.words,
     }
 
 

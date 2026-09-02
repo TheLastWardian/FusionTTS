@@ -90,6 +90,7 @@ class OmniVoiceEngine:
             env["HOST"] = "127.0.0.1"
             env["HF_HUB_OFFLINE"] = "1"
             env["OMNIVOICE_INT8"] = "1" if self._config.get("tts_int8") else "0"
+            env["TTS_ALIGNMENT"] = str(self._config.get("tts_alignment"))
             if self._proc_log is not None:
                 self._proc_log.close()
                 self._proc_log = None
@@ -289,7 +290,10 @@ class OmniVoiceEngine:
                     logger.info(
                         "audio valido en intento %d/%d", attempt, SYNTH_MAX_ATTEMPTS
                     )
-                return TTSResult(audio=audio, sample_rate=sample_rate)
+                words = data.get("words")
+                if not isinstance(words, list):
+                    words = None
+                return TTSResult(audio=audio, sample_rate=sample_rate, words=words)
             logger.warning(
                 "audio vacio de /synthesize (intento %d/%d, %d bytes)",
                 attempt,

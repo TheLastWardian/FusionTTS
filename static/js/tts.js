@@ -14,11 +14,30 @@ let decodeSeq = Promise.resolve();
 let activeMessageId = null;
 let chunksOk = 0;
 let chunksDropped = 0;
+// Karaoke: tracking de la palabra activa del chunk que suena (rAF contra
+// ctx.currentTime). ctx.suspend() (pausa) congela el clock solo.
+let wordRaf = 0;
+let wordTrack = null; // {item, t0, last}
 
 function updateChipDebug() {
   const chip = document.getElementById("tts-chip");
   if (chip)
     chip.title = `TTS · ok: ${chunksOk} · descartados: ${chunksDropped} · cola: ${player ? player.pendingCount : 0}`;
+}
+
+// Persona cuyo audio suena AHORA (null = cola vacia). Las cards de la
+// sidebar lo escuchan via el evento "persona:speaking"; el render de cards
+// lo consulta para no perder el estado en un re-render.
+let speakingPersona = null;
+
+export function getSpeakingPersona() {
+  return speakingPersona;
+}
+
+function setSpeaking(name) {
+  if (speakingPersona === name) return;
+  speakingPersona = name;
+  window.dispatchEvent(new CustomEvent("persona:speaking", { detail: { persona: name } }));
 }
 
 // id del mensaje cuyo audio puede sonar (modelo F5-TTS currentTtsMsgId):
@@ -49,15 +68,18 @@ function ensureCtx() {
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   player = new FTTS.AudioQueue({
     gap: 80,
-    onPlay: (buf) => {
+    onPlay: (item) => {
       console.info(
-        `[tts] ▶ suena ${Math.round(buf.duration * 100) / 100}s · cola pendiente: ${player.pendingCount}`
+        `[tts] ▶ suena ${Math.round(item.audio.duration * 100) / 100}s · cola pendiente: ${player.pendingCount}`
       );
+      setSpeaking(item.persona);
       updateChipDebug();
-      scheduleSource(buf);
+      scheduleSource(item);
+      startWordTrack(item);
     },
     onDrain: () => {
       console.info("[tts] cola vacía (playback terminado)");
+      setSpeaking(null);
       updateChipDebug();
     },
   });
@@ -69,16 +91,72 @@ function ensureCtx() {
   return ctx;
 }
 
-function scheduleSource(buf) {
+function scheduleSource(item) {
   const src = ctx.createBufferSource();
-  src.buffer = buf;
+  src.buffer = item.audio;
   src.connect(ctx.destination);
   src.onended = () => {
     currentSrc = null;
+    stopWordTrack();
     player.currentEnded();
   };
   src.start();
   currentSrc = src;
+}
+
+function emitWord(item, idx) {
+  window.dispatchEvent(
+    new CustomEvent("tts:word", {
+      detail: {
+        messageId: item.messageId || null,
+        sentenceId: item.sentenceId ?? null,
+        word: idx,
+      },
+    })
+  );
+}
+
+function stopWordTrack() {
+  if (wordRaf) {
+    cancelAnimationFrame(wordRaf);
+    wordRaf = 0;
+  }
+  if (wordTrack) {
+    emitWord(wordTrack.item, -1);
+    wordTrack = null;
+  }
+}
+
+// Karaoke: recorre item.words (spans en ms) contra el clock del AudioContext
+// y dispara "tts:word" cuando la palabra activa cambia (-1 = ninguna).
+function startWordTrack(item) {
+  stopWordTrack();
+  if (!item.words || !item.words.length) return;
+  const t0 = ctx.currentTime;
+  const durMs = item.audio.duration * 1000;
+  wordTrack = { item, t0, last: -2 };
+  const step = () => {
+    if (!wordTrack || wordTrack.item !== item) return;
+    const pos = (ctx.currentTime - t0) * 1000;
+    if (pos >= durMs) {
+      stopWordTrack();
+      return;
+    }
+    const ws = item.words;
+    let idx = -1;
+    for (let i = 0; i < ws.length; i++) {
+      if (pos >= ws[i].start_ms && pos < ws[i].end_ms) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx !== wordTrack.last) {
+      wordTrack.last = idx;
+      emitWord(item, idx);
+    }
+    wordRaf = requestAnimationFrame(step);
+  };
+  wordRaf = requestAnimationFrame(step);
 }
 
 function base64ToBytes(b64) {
@@ -91,6 +169,7 @@ function base64ToBytes(b64) {
 function stopLocal() {
   console.warn(`[tts] stopLocal: detengo fuente y vacío la cola (pendientes: ${player ? player.pendingCount : 0})`);
   gen++;
+  stopWordTrack();
   if (currentSrc) {
     try {
       currentSrc.stop();
@@ -100,7 +179,7 @@ function stopLocal() {
   updateChipDebug();
 }
 
-function decodeAndEnqueue(arrayBuffer) {
+function decodeAndEnqueue(arrayBuffer, persona, extra) {
   const g = gen;
   const t0 = performance.now();
   const job = decodeSeq.then(async () => {
@@ -113,7 +192,16 @@ function decodeAndEnqueue(arrayBuffer) {
     console.info(
       `[tts] decodificado ${Math.round(buf.duration * 100) / 100}s en ${Math.round(performance.now() - t0)}ms → cola`
     );
-    player.enqueue(buf);
+    // el item lleva la persona: la cola es serial pero una ronda mezcla
+    // hablantes, y la card se enciende por quien suena, no por el ultimo
+    // encolado. extra = karaoke (words + ids para el highlight)
+    player.enqueue({
+      audio: buf,
+      persona: persona || null,
+      words: (extra && extra.words) || null,
+      messageId: (extra && extra.messageId) || null,
+      sentenceId: (extra && extra.sentenceId) ?? null,
+    });
   });
   decodeSeq = job.catch((err) => {
     console.warn("[tts] no se pudo decodificar el audio:", err && err.message ? err.message : err);
@@ -137,25 +225,34 @@ export function feedAudioChunk(ev) {
       `[tts] chunk ${ev.sentence_id} ok (msg ${String(ev.message_id || "-").slice(0, 8)}, ${bytes.length} bytes) → decodificar`
     );
     updateChipDebug();
-    decodeAndEnqueue(bytes.buffer);
+    decodeAndEnqueue(bytes.buffer, ev.persona, {
+      words: ev.words || null,
+      messageId: ev.message_id || null,
+      sentenceId: ev.sentence_id,
+    });
   } catch (err) {
     console.warn("tts.js: base64 inválido en audio_chunk:", err && err.message ? err.message : err);
   }
 }
 
 // Play all (boton de mensaje): encola TODAS las oraciones en orden por la
-// misma cola FIFO de decodificacion; no re-sintetiza nada.
-export function playChunksB64(b64List) {
-  if (!b64List || !b64List.length) return;
+// misma cola FIFO de decodificacion; no re-sintetiza nada. chunks = eventos
+// de audio_chunk ({audio, words, sentence_id, message_id}).
+export function playChunksB64(chunks, persona) {
+  if (!chunks || !chunks.length) return;
   if (!ttsReady()) {
     toast("TTS no está activo", "error");
     return;
   }
-  console.info(`[tts] play all: ${b64List.length} oraciones → cola (en orden)`);
+  console.info(`[tts] play all: ${chunks.length} oraciones → cola (en orden)`);
   ensureCtx();
-  for (const b64 of b64List) {
+  for (const c of chunks) {
     try {
-      decodeAndEnqueue(base64ToBytes(b64).buffer);
+      decodeAndEnqueue(base64ToBytes(c.audio).buffer, persona, {
+        words: c.words || null,
+        messageId: c.message_id || null,
+        sentenceId: c.sentence_id,
+      });
     } catch (err) {
       console.warn("tts.js: base64 inválido en playChunksB64:", err && err.message ? err.message : err);
     }
@@ -164,7 +261,7 @@ export function playChunksB64(b64List) {
 
 // Reproduce una oracion desde su base64 ya descargado (botones por oracion):
 // no re-sintetiza, suena al instante por la misma cola de decodificacion.
-export function playChunkB64(b64) {
+export function playChunkB64(b64, persona, extra) {
   if (!ttsReady()) {
     toast("TTS no está activo", "error");
     return;
@@ -172,7 +269,7 @@ export function playChunkB64(b64) {
   console.info(`[tts] botón de oración: ${b64.length} chars b64 → decodificar`);
   ensureCtx();
   try {
-    decodeAndEnqueue(base64ToBytes(b64).buffer);
+    decodeAndEnqueue(base64ToBytes(b64).buffer, persona, extra);
   } catch (err) {
     console.warn("tts.js: base64 inválido en playChunkB64:", err && err.message ? err.message : err);
   }
@@ -215,7 +312,16 @@ export async function replayTTS(text, persona) {
     }
     ensureCtx();
     const bytes = new Uint8Array(await res.arrayBuffer());
-    decodeAndEnqueue(bytes.buffer);
+    let words = null;
+    const hw = res.headers.get("X-Words");
+    if (hw) {
+      try {
+        words = JSON.parse(atob(hw));
+      } catch {
+        words = null;
+      }
+    }
+    decodeAndEnqueue(bytes.buffer, persona, { words });
     return true;
   } catch (err) {
     toast(err && err.message ? err.message : "Error al reproducir", "error");

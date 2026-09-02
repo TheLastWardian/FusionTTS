@@ -3,6 +3,7 @@ import { state } from "./state.js";
 import { api, avatarCss, initials, avatarEl, avatarUrl, toast } from "./utils.js";
 import { refreshTtsLanguageOptions } from "./settings.js";
 import * as layout from "./persona-layout.js";
+import { getSpeakingPersona } from "./tts.js";
 
 let uploading = false;
 let draft = null;
@@ -113,6 +114,9 @@ function personaRow(p, draggable = false, pinned = false) {
   }
 
   item.className = "persona persona-card";
+  // si suena su audio en este instante, la card arranca encendida (un
+  // re-render no puede apagar lo que ya esta sonando)
+  if (getSpeakingPersona() === p.name) item.classList.add("speaking");
   // imagen grande: cover de avatar_image, o radial gradient + iniciales
   const image = document.createElement("div");
   image.className = "pc-image";
@@ -1609,6 +1613,15 @@ async function refreshPersonas() {
   refreshTtsLanguageOptions();
 }
 
+// Card encendida mientras suena el audio de esa persona (evento
+// "persona:speaking" de tts.js; null = cola vacia). Todas las ocurrencias:
+// la misma persona puede aparecer en el tope y en una carpeta/room.
+function applySpeaking(name) {
+  document.querySelectorAll(".persona-card").forEach((el) => {
+    el.classList.toggle("speaking", !!name && el.dataset.name === name);
+  });
+}
+
 export async function initPersonas() {
   // corre en paralelo con initSettings: si la config todavia no llego, la
   // traemos para que el toggle de For Instruct arranque con el estado real
@@ -1619,6 +1632,7 @@ export async function initPersonas() {
       // si falla, initSettings la carga igualmente; el checkbox queda en default
     }
   }
+  window.addEventListener("persona:speaking", (e) => applySpeaking(e.detail.persona));
   await refreshPersonas();
   document.getElementById("btn-new-folder").addEventListener("click", createFolder);
   initColToggle();

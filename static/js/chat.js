@@ -35,6 +35,9 @@ let pendingImageDataUrl = "";
 // burbujas por message_id: el audio de una oracion puede llegar cuando
 // current ya apunta a la siguiente persona (la sintesis va atrasada)
 let messageBubbles = new Map();
+// karaoke: message_id -> burbuja con spans .kw. VIVE mas que messageBubbles
+// (se limpia en finishStream) porque el audio suena despues del stream.
+let wordBubbles = new Map();
 // generacion por stream: al volver el boton a "enviar" con text_done se
 // puede mandar un mensaje nuevo mientras la ronda anterior sigue entregando
 // audio; solo la generacion vigente controla el boton y la limpieza global.
@@ -122,7 +125,9 @@ function startPersonaBubble(name) {
     d.className = "dot";
     dots.appendChild(d);
   }
-  const textEl = document.createTextNode("");
+  // span (no TextNode): el karaoke inserta spans .kw entre los tokens
+  const textEl = document.createElement("span");
+  textEl.className = "msg-text";
   const cursor = document.createElement("span");
   cursor.className = "cursor-blink";
   bubble.append(dots, textEl, cursor);
@@ -145,12 +150,72 @@ function startPersonaBubble(name) {
   };
 }
 
+// Karaoke: re-renderiza b.textEl con spans .kw en las palabras de las
+// oraciones que llegaron con words (b.wordsBySentence: sentence_id ->
+// {sentence, words}). Idempotente: se vuelve a correr con cada oracion
+// nueva, sobre el texto parcial que ya hay (la sintesis va atrasada y el
+// mensaje puede seguir streamando).
+function wrapSentenceWords(b) {
+  if (!b.wordsBySentence || !b.wordsBySentence.size) return;
+  const full = b.textEl.textContent;
+  const ranges = [];
+  for (const [sid, entry] of b.wordsBySentence) {
+    const idx = full.indexOf(entry.sentence);
+    if (idx < 0) continue;
+    const words = entry.words;
+    // tokens de la oracion tal como aparecen en el mensaje (el server
+    // alineo word a word sobre el mismo texto, menos la puntuacion)
+    const parts = entry.sentence.split(/(\s+)/);
+    let off = idx;
+    let wi = 0;
+    for (const part of parts) {
+      if (!part) continue;
+      if (/\s/.test(part[0])) {
+        off += part.length;
+        continue;
+      }
+      if (wi < words.length) ranges.push({ start: off, end: off + part.length, sid, w: wi });
+      off += part.length;
+      wi++;
+    }
+  }
+  if (!ranges.length) return;
+  ranges.sort((x, y) => x.start - y.start);
+  b.textEl.textContent = "";
+  const spans = new Map();
+  let pos = 0;
+  for (const r of ranges) {
+    if (r.start < pos) continue;
+    if (r.start > pos) b.textEl.append(full.slice(pos, r.start));
+    const sp = document.createElement("span");
+    sp.className = "kw";
+    sp.textContent = full.slice(r.start, r.end);
+    b.textEl.appendChild(sp);
+    if (!spans.has(r.sid)) spans.set(r.sid, []);
+    spans.get(r.sid)[r.w] = sp;
+    pos = r.end;
+  }
+  if (pos < full.length) b.textEl.append(full.slice(pos));
+  b.wordSpans = spans;
+}
+
+function clearKwActive(b) {
+  if (b.activeKw) b.activeKw.classList.remove("kw-active");
+  b.activeKw = null;
+}
+
 // boton de play por oracion (como TalkWithMe): reproduce el audio que ya
 // llego por SSE, sin volver a sintetizar
 function addSentenceSound(b, ev) {
   if (!ev.audio) return;
   if (!ttsReady()) return;
   b.sounds.push(ev);
+  if (ev.words && ev.words.length && b.messageId) {
+    if (!b.wordsBySentence) b.wordsBySentence = new Map();
+    b.wordsBySentence.set(ev.sentence_id, { sentence: ev.text, words: ev.words });
+    wrapSentenceWords(b);
+    wordBubbles.set(b.messageId, b);
+  }
   const follow = nearBottom();
   if (!b.soundsEl) {
     b.soundsEl = document.createElement("div");
@@ -167,7 +232,7 @@ function addSentenceSound(b, ev) {
     const ai = document.createElement("i");
     ai.className = "ti ti-player-play-filled";
     all.appendChild(ai);
-    all.addEventListener("click", () => playChunksB64(b.sounds.map((e) => e.audio)));
+    all.addEventListener("click", () => playChunksB64(b.sounds, b.persona));
     b.soundsEl.appendChild(all);
   }
   const btn = document.createElement("button");
@@ -177,8 +242,14 @@ function addSentenceSound(b, ev) {
   const ico = document.createElement("i");
   ico.className = "ti ti-player-play";
   btn.appendChild(ico);
-  const b64 = ev.audio;
-  btn.addEventListener("click", () => playChunkB64(b64));
+    const b64 = ev.audio;
+    btn.addEventListener("click", () =>
+      playChunkB64(b64, ev.persona, {
+        words: ev.words || null,
+        messageId: b.messageId,
+        sentenceId: ev.sentence_id,
+      }),
+    );
   b.soundsEl.appendChild(btn);
   if (follow) scrollBottom();
 }
@@ -189,7 +260,7 @@ function appendToken(b, token) {
     b.dots.remove();
     b.dots = null;
   }
-  b.textEl.textContent += token;
+  b.textEl.append(token);
   if (nearBottom()) scrollBottom();
 }
 
@@ -385,6 +456,9 @@ function finalizeBubble(b, fullText, tokens) {
       messageBubbles.delete(b.messageId),
     ),
   );
+  // el re-render de fullText borro los spans .kw: si ya hay oraciones
+  // alineadas, re-ajustarlas al texto final (el audio puede seguir sonando)
+  if (b.wordsBySentence && b.wordsBySentence.size) wrapSentenceWords(b);
   // la fila externa solo existe si hay audio (oraciones TTS live; el
   // replay + wavs guardados los anade attachSavedAudio al llegar "complete")
   if (b.soundsEl) {
@@ -650,6 +724,24 @@ export function initChat() {
   }
   window.addEventListener("tts:status", () => {
     messagesEl.querySelectorAll(".msg").forEach((m) => applyAudioMode(m));
+  });
+  // karaoke: la palabra activa llega de tts.js (tracking contra el clock de
+  // playback); -1 = limpiar
+  window.addEventListener("tts:word", (e) => {
+    const d = e.detail;
+    if (!d || !d.messageId) return;
+    const b = wordBubbles.get(d.messageId);
+    if (!b || !b.rootEl.isConnected) {
+      wordBubbles.delete(d.messageId);
+      return;
+    }
+    clearKwActive(b);
+    if (d.word < 0 || !b.wordSpans) return;
+    const arr = b.wordSpans.get(d.sentenceId);
+    if (arr && arr[d.word]) {
+      b.activeKw = arr[d.word];
+      b.activeKw.classList.add("kw-active");
+    }
   });
   updateSendButton();
 }

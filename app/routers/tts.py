@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import json
 import logging
 from collections.abc import Coroutine
 from typing import Any
@@ -126,8 +128,14 @@ async def speak(payload: SpeakRequest, request: Request) -> Response:
         )
     except TTSError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    headers = {"X-Sample-Rate": str(result.sample_rate)}
+    if result.words:
+        # karaoke: palabras alineadas del replay (JSON base64 en header)
+        headers["X-Words"] = base64.b64encode(
+            json.dumps(result.words).encode("utf-8")
+        ).decode("ascii")
     return Response(
         content=result.audio,
         media_type="audio/wav",
-        headers={"X-Sample-Rate": str(result.sample_rate)},
+        headers=headers,
     )

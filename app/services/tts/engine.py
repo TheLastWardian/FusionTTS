@@ -7,6 +7,9 @@ from typing import Protocol, runtime_checkable
 class TTSResult:
     audio: bytes
     sample_rate: int
+    # Alineacion forzada por palabra [{text, start_ms, end_ms}] (karaoke);
+    # None si el modo de alineacion esta apagado o la sintesis no la trajo.
+    words: list | None = None
 
 
 class TTSError(Exception):

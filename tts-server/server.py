@@ -34,6 +34,8 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from alignment import align_audio, mode as alignment_mode
+
 # Import de torch tolerante: el modulo se puede importar sin torch
 # (los tests corren en el venv de la app, que no trae torch).
 try:
@@ -168,6 +170,9 @@ class SynthesizeRequest(BaseModel):
 class SynthesizeResponse(BaseModel):
     audio_base64: str
     sample_rate: int
+    # Alineacion forzada por palabra (karaoke); None si el modo
+    # TTS_ALIGNMENT es "off" o la alineacion fallo.
+    words: list[dict] | None = None
 
 
 class HealthResponse(BaseModel):
@@ -175,6 +180,7 @@ class HealthResponse(BaseModel):
     model: str = MODEL_NAME
     device: str = DEVICE
     cuda_available: bool = _cuda_available()
+    alignment: str = alignment_mode()
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +263,14 @@ def _synthesize_sync(req: SynthesizeRequest) -> SynthesizeResponse:
 
     _release_memory()
 
-    return SynthesizeResponse(audio_base64=_audio_to_b64(audio_np, sr), sample_rate=sr)
+    # Karaoke: alineacion forzada del texto sobre el audio generado. Corre
+    # fuera del _infer_lock (no compite con la generacion) y nunca tumba el
+    # /synthesize: si falla, se responde sin words.
+    words = align_audio(audio_np, sr, req.text)
+
+    return SynthesizeResponse(
+        audio_base64=_audio_to_b64(audio_np, sr), sample_rate=sr, words=words
+    )
 
 
 # ---------------------------------------------------------------------------
