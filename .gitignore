@@ -23,6 +23,7 @@ personas_pending/
 # Scripts de debugging local (dependen del audio de personas especificas)
 asr_check.py
 tts_repro_tifa.py
+tests/alignment_benchmark.py
 
 # Temporales
 *.tmp
