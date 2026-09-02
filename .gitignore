@@ -20,6 +20,10 @@ personas_audio/
 personas_avatars/
 personas_pending/
 
+# Scripts de debugging local (dependen del audio de personas especificas)
+asr_check.py
+tts_repro_tifa.py
+
 # Temporales
 *.tmp
 .tts_cancel.signal
