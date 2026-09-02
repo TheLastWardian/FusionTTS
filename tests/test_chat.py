@@ -315,12 +315,9 @@ def test_auto_chat_continues_until_budget(client, mock_llm):
     assert resp.status_code == 200
     events = parse_events(resp.text)
     personas = [e["persona"] for e in events if e["type"] == "start"]
-    # ronda inicial (Jean, Fischl) + 3 continuaciones = 5 turnos
-    assert len(personas) == 5
-    assert personas[0] == "Jean"
-    assert personas[1] == "Fischl"
-    # nunca el mismo hablante dos veces seguidas
-    assert all(a != b for a, b in zip(personas, personas[1:]))
+    # ronda inicial (Jean, Fischl) + 3 continuaciones = 5 turnos; Keqing no
+    # participo de la ronda ni de la conversacion, no entra al pool
+    assert personas == ["Jean", "Fischl", "Jean", "Fischl", "Jean"]
     assert events[-1] == {"type": "complete", "cancelled": False}
     # 5 streams (uno por turno) y 3 llamadas de router (una por continuacion)
     assert mock_llm.stream_calls == 5
@@ -330,6 +327,43 @@ def test_auto_chat_continues_until_budget(client, mock_llm):
     assert all(
         c.get("chat_template_kwargs") == {"enable_thinking": False} for c in router_calls
     )
+
+
+def test_auto_chat_mention_round_stays_with_mentioned(client, mock_llm):
+    # "Fischl, ...": la ronda inicial es solo Fischl (mencion). Nadie mas
+    # hablo en la conversacion -> el pool de continuacion queda [Fischl]:
+    # ella sigue la escena sola (sin copiar su propia linea) y no se fuerza
+    # a Jean/Keqing a participar.
+    _enable_auto_chat(client, "test", 3)
+    mock_llm.chat_content = "Keqing"  # fuera del pool: siempre fallback
+    resp = client.post(
+        "/api/chat",
+        json={
+            "message": "Fischl, dime algo",
+            "who_answers": "router",
+            "chat_room": "test",
+        },
+    )
+    assert resp.status_code == 200
+    events = parse_events(resp.text)
+    types = [e["type"] for e in events]
+    assert "error" not in types
+    assert [e["persona"] for e in events if e["type"] == "start"] == [
+        "Fischl",
+        "Fischl",
+        "Fischl",
+        "Fischl",
+    ]
+    # 3 llamadas de router (una por continuacion); el routing inicial fue
+    # por mencion, sin LLM
+    assert len(non_stream_calls(mock_llm)) == 3
+    assert mock_llm.stream_calls == 4
+    # 2do stream (1ra continuacion): el contexto termina en su propio
+    # assistant + [Continue] (user): sin esto llama.cpp responde 400 o el
+    # modelo repite su propia linea
+    cont_msgs = stream_calls(mock_llm)[1]["messages"]
+    assert cont_msgs[-1] == {"role": "user", "content": "[Continue]"}
+    assert cont_msgs[-2]["role"] == "assistant"
 
 
 def test_auto_chat_off_by_default_no_continuation(client, mock_llm):

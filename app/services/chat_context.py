@@ -62,4 +62,11 @@ def build_llm_messages(
                 messages.append(
                     {"role": "user", "content": f"[{msg.get('sender')}]: {text}"}
                 )
+    # La lista nunca debe terminar en el propio assistant del personaje que
+    # responde: llama.cpp la rechaza (2+ asistentes al final) o el modelo
+    # "continua" su propia linea y la repite. Solo ocurre con turnos seguidos
+    # del mismo hablante (auto-chat); se cierra con un prompt user para que
+    # genere una linea nueva.
+    if messages[-1]["role"] == "assistant":
+        messages.append({"role": "user", "content": "[Continue]"})
     return messages

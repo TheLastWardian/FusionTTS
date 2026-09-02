@@ -32,8 +32,34 @@ def test_basic_roles():
     # max_context_turns=0 = sin historial (semantica existente); 500 = todo
     msgs = build_llm_messages("SYS", "Jean", _history(4), 500)
     assert msgs[0] == {"role": "system", "content": "SYS"}
-    assert [m["role"] for m in msgs[1:]] == ["user", "assistant", "user", "assistant"]
-    assert [m["content"] for m in msgs[1:]] == ["user-0", "asst-1", "user-2", "asst-3"]
+    # el tail es el propio assistant de Jean -> cierra con [Continue]
+    assert [m["role"] for m in msgs[1:]] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert [m["content"] for m in msgs[1:]] == [
+        "user-0",
+        "asst-1",
+        "user-2",
+        "asst-3",
+        "[Continue]",
+    ]
+
+
+def test_no_continue_marker_when_tail_is_other_persona():
+    history = _history(2)
+    history[1] = new_message("assistant", "Fischl", "hola")
+    msgs = build_llm_messages("SYS", "Jean", history, 500)
+    # la linea final es de Fischl (user [Fischl]: hola): no se agrega nada
+    assert msgs[-1] == {"role": "user", "content": "[Fischl]: hola"}
+
+
+def test_no_continue_marker_when_tail_is_user():
+    msgs = build_llm_messages("SYS", "Jean", [new_message("user", "user", "hola")], 500)
+    assert msgs[-1] == {"role": "user", "content": "hola"}
 
 
 def test_max_context_turns_zero_means_no_history():
@@ -43,7 +69,7 @@ def test_max_context_turns_zero_means_no_history():
 
 def test_max_context_turns_caps_tail():
     msgs = build_llm_messages("SYS", "Jean", _history(6), 2)
-    assert [m["content"] for m in msgs[1:]] == ["user-4", "asst-5"]
+    assert [m["content"] for m in msgs[1:]] == ["user-4", "asst-5", "[Continue]"]
 
 
 def test_summary_prepended_after_system():
@@ -52,7 +78,13 @@ def test_summary_prepended_after_system():
         "role": "user",
         "content": "[Contexto previo resumido]\n\nRESUMEN",
     }
-    assert [m["content"] for m in msgs[2:]] == ["user-0", "asst-1", "user-2", "asst-3"]
+    assert [m["content"] for m in msgs[2:]] == [
+        "user-0",
+        "asst-1",
+        "user-2",
+        "asst-3",
+        "[Continue]",
+    ]
 
 
 def test_compacted_messages_excluded_from_context():
@@ -63,6 +95,7 @@ def test_compacted_messages_excluded_from_context():
         "[Contexto previo resumido]\n\nRESUMEN",
         "user-4",
         "asst-5",
+        "[Continue]",
     ]
 
 
@@ -78,6 +111,7 @@ def test_max_context_turns_applies_to_uncompacted_tail():
         "asst-9",
         "user-10",
         "asst-11",
+        "[Continue]",
     ]
 
 
@@ -108,6 +142,7 @@ def test_presence_note_when_persona_joins_midway():
         "[B]: b1",
         "u1",
         "c1",
+        "[Continue]",
     ]
 
 

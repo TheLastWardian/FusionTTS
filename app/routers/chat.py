@@ -448,8 +448,10 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
 
             # auto-chat: solo cuando la cola se agoto (la ronda termino) el
             # router elige al siguiente hablante; si queda presupuesto y no
-            # hay stop. Pool = la ronda menos el que acabo de hablar (con 1
-            # persona se sigue a si mismo). NADIE -> la cola no crece y termina.
+            # hay stop. Pool = ronda inicial + quienes ya hablaron en la
+            # conversacion (los que nunca participaron no se fuerzan), menos
+            # el que acabo de hablar; vacio -> se sigue a si mismo (seguir la
+            # escena). NADIE -> la cola no crece y termina.
             if (
                 auto_on
                 and turn_index >= len(turn_queue)
@@ -459,7 +461,16 @@ async def _chat_stream(req: ChatRequest, state) -> AsyncIterator[str]:
                 last_msg = room_store.history[-1] if room_store.history else None
                 last_text = (last_msg or {}).get("text", "") or ""
                 if last_text.strip():
-                    pool = [n for n in fixed if n != persona_name] or list(fixed)
+                    spoken = {
+                        m.get("sender")
+                        for m in room_store.history
+                        if m.get("role") == "assistant" and m.get("sender")
+                    }
+                    pool = [
+                        n
+                        for n in eligible
+                        if n != persona_name and (n in fixed or n in spoken)
+                    ] or [persona_name]
                     try:
                         nexts = await pick_personas(
                             "router",
