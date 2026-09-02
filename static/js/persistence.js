@@ -225,12 +225,17 @@ export function beginMessageEdit(msgEl, bubbleEl, messageId, room) {
   if (!first || first.nodeType !== Node.TEXT_NODE) return;
   const originalText = first.nodeValue;
 
+  // la burbuja es shrink-to-fit (flex column align-end): un textarea width:100%
+  // dentro de un padre sin ancho definido la colapsa a una tira vertical.
+  // Se congela el ancho actual y se libera al terminar la edicion.
+  const frozenWidth = bubbleEl.offsetWidth;
   const taEl = document.createElement("textarea");
   taEl.className = "msg-edit-ta";
   taEl.value = originalText;
   taEl.title = "Enter = guardar · Esc = cancelar";
   taEl.spellcheck = false;
   bubbleEl.replaceChild(taEl, first);
+  bubbleEl.style.width = frozenWidth + "px";
 
   // los botones de editar se meten en la barra interior (junto al borrar)
   const okBtn = document.createElement("button");
@@ -263,6 +268,7 @@ export function beginMessageEdit(msgEl, bubbleEl, messageId, room) {
     exited = true;
     document.removeEventListener("click", onDocClick);
     bubbleEl.replaceChild(document.createTextNode(text), taEl);
+    bubbleEl.style.width = "";
     okBtn.remove();
     cancelBtn.remove();
   };
