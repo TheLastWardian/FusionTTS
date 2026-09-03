@@ -20,7 +20,7 @@ const APP_STEPS = [
   {
     sel: "#who-chips",
     title: "Who answers",
-    body: "Choose who responds to your next message: the router picks automatically, or select one or more characters by clicking their chips.",
+    body: "Choose who responds to your next message: the router picks automatically, or click a character's chip to pick them — ctrl+click to select several at once.",
   },
   {
     sel: "#chat-input",

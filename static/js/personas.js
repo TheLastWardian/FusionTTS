@@ -1850,11 +1850,12 @@ function renderWhoChips() {
   ) {
     state.who = "router";
   }
-  const mk = (label, value) => {
+  const mk = (label, value, title) => {
     const b = document.createElement("button");
     b.className = "who-chip" + (whoIsSel(value) ? " sel" : "");
     b.textContent = label;
     b.dataset.value = value;
+    if (title) b.title = title;
     b.addEventListener("click", (e) => {
       if (e.ctrlKey || e.metaKey) ctrlSelectWho(value);
       else selectWho(value);
@@ -1863,7 +1864,7 @@ function renderWhoChips() {
     whoChips.push(b);
   };
   mk("LLM router", "router");
-  for (const p of vis) mk(p.name, p.name);
+  for (const p of vis) mk(p.name, p.name, "ctrl+click to select multiple people");
   mk("Random", "random");
 
   whoPlus = document.createElement("button");
