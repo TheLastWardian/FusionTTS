@@ -227,6 +227,27 @@ function markKwPlayed(b) {
   b.activeKw = null;
 }
 
+// Karaoke: monotonia del dorado — marca kw-played las palabras [0, n) de la
+// oracion. rAF salta indices cuando la pestana esta en segundo plano (o con
+// frames largos), y el audio sigue sonando: si la palabra N ya sonaba, las
+// 0..N-1 tambien sonaron y deben estar doradas
+function fillKw(arr, n) {
+  for (let i = 0; i < n && i < arr.length; i++) {
+    const p = arr[i];
+    if (p && !p.classList.contains("kw-played")) {
+      p.classList.remove("kw-active");
+      p.classList.add("kw-played");
+    }
+  }
+}
+
+// progreso dorado por oracion (para restaurar tras re-renders)
+function noteKwProgress(b, sid, w) {
+  if (w < 0) return;
+  if (!b.kwProgress) b.kwProgress = new Map();
+  if (w > (b.kwProgress.get(sid) ?? -1)) b.kwProgress.set(sid, w);
+}
+
 // boton de play por oracion (como TalkWithMe): reproduce el audio que ya
 // llego por SSE, sin volver a sintetizar
 function addSentenceSound(b, ev) {
@@ -759,24 +780,27 @@ export function initChat() {
       wordBubbles.delete(d.messageId);
       return;
     }
+    if (!b.wordSpans) return;
+    const arr = d.sentenceId != null ? b.wordSpans.get(d.sentenceId) : null;
     if (d.word < 0) {
-      // gap entre palabras / fin de oracion: la activa se queda dorada
+      // gap entre palabras / fin de oracion: la activa se queda dorada, y
+      // el resto de la oracion tambien (rAF puede caer pasado el final)
       markKwPlayed(b);
+      if (arr) {
+        fillKw(arr, arr.length);
+        noteKwProgress(b, d.sentenceId, arr.length - 1);
+      }
       return;
     }
-    if (!b.wordSpans) return;
-    const arr = b.wordSpans.get(d.sentenceId);
-    const sp = arr && arr[d.word];
+    if (!arr) return;
+    fillKw(arr, d.word);
+    noteKwProgress(b, d.sentenceId, d.word);
+    const sp = arr[d.word];
     if (!sp) return;
     if (b.activeKw && b.activeKw !== sp) markKwPlayed(b);
     sp.classList.add("kw-active");
     b.activeKw = sp;
     b.lastWord = { sid: d.sentenceId, w: d.word };
-    // progreso dorado por oracion (para restaurar tras re-renders)
-    if (!b.kwProgress) b.kwProgress = new Map();
-    if (d.word > (b.kwProgress.get(d.sentenceId) ?? -1)) {
-      b.kwProgress.set(d.sentenceId, d.word);
-    }
   });
   updateSendButton();
 }
