@@ -118,7 +118,7 @@ body.resizing { user-select: none; -webkit-user-select: none; }
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   padding: 4px 8px;
   background: var(--bg2);
   border: 1px solid var(--border);
@@ -139,7 +139,7 @@ body.resizing { user-select: none; -webkit-user-select: none; }
   cursor: pointer;
   border: 1px solid var(--border-strong);
   background: var(--bg2);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   transition: all .15s;
   font-family: var(--font);
   flex-shrink: 0;
@@ -174,7 +174,7 @@ body.resizing { user-select: none; -webkit-user-select: none; }
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; font-size: 16px; transition: all .1s;
   flex-shrink: 0;
@@ -399,7 +399,7 @@ body.cols-4 .persona-list, body.cols-4 .persona-children { grid-template-columns
 .persona-folder { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); cursor: default; }
 .persona-folder:hover { border-color: var(--border-strong); }
 .folder-chevron { font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
-.persona-folder-name { flex: 1; min-width: 0; font-size: 11px; font-weight: 600; color: var(--text-secondary); letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.persona-folder-name { flex: 1; min-width: 0; font-size: 11px; font-weight: 600; color: var(--text-primary); letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .persona-folder-input { flex: 1; min-width: 0; background: var(--bg1); border: 1px solid var(--accent-border); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 2px 6px; }
 .persona-folder-input:focus { outline: none; }
 .folder-btn { width: 22px; height: 20px; }
@@ -645,7 +645,7 @@ body.cols-4 .persona-list, body.cols-4 .persona-children { grid-template-columns
   width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
   background: conic-gradient(var(--ctx-color) calc(var(--ctx-pct) * 3.6deg), var(--bg3) 0);
 }
-.ctx-num { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+.ctx-num { font-size: 11px; color: var(--text-primary); white-space: nowrap; }
 
 .msg.user .msg-bubble { background: var(--accent-bg); border-color: var(--accent-border); cursor: text; }
 .msg-edit-ta {
