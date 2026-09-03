@@ -478,6 +478,14 @@ body.cols-4 .persona-list, body.cols-4 .persona-children { grid-template-columns
 }
 .room-auto:hover { color: var(--accent); background: var(--bg2); }
 .room-auto.on { color: var(--accent); background: var(--accent-bg); }
+/* parpadeo de elementos vinculados al tooltip (settings tipLink) */
+@keyframes tiplink-pulse {
+  0%, 100% { filter: none; box-shadow: none; }
+  50% { filter: brightness(1.7); box-shadow: 0 0 8px var(--accent); }
+}
+.tip-link-pulse {
+  animation: tiplink-pulse 0.9s ease-in-out infinite;
+}
 .room-personas {
   width: 26px; height: 22px;
   border-radius: 4px; border: none; background: transparent;

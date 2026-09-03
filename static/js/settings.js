@@ -30,18 +30,76 @@ const LLM_GROUPS = [
         placeholder: "how to describe the image so the characters react to the action; empty = default",
         rows: 3,
       },
-      { key: "llm_temperature", type: "range", min: 0, max: 2, step: 0.05, kind: "float", label: "Temperature" },
-      { key: "llm_top_p", type: "range", min: 0, max: 1, step: 0.01, kind: "float", label: "Top-p" },
-      { key: "llm_max_tokens", type: "number", min: 1, max: 100000, label: "Max tokens" },
+      {
+        key: "llm_temperature",
+        type: "range",
+        min: 0,
+        max: 2,
+        step: 0.05,
+        kind: "float",
+        label: "Temperature",
+        tip: "Creativity of the replies: low = literal and focused, high = varied and wild. Lower it if a character drifts out of character.",
+      },
+      {
+        key: "llm_top_p",
+        type: "range",
+        min: 0,
+        max: 1,
+        step: 0.01,
+        kind: "float",
+        label: "Top-p",
+        tip: "Nucleus sampling: only candidates inside the top X% of probability are considered. Temperature alone is enough for most setups — leave it unless you know why you are changing it.",
+      },
+      {
+        key: "llm_max_tokens",
+        type: "number",
+        min: 1,
+        max: 100000,
+        label: "Max tokens",
+        tip: "Maximum length of a single character reply. Higher allows longer replies (slower, more VRAM); the reply also stops when the character is done.",
+      },
     ],
   },
   {
     group: "General",
     items: [
-      { key: "max_persona_replies", type: "range", min: 1, max: 5, step: 1, kind: "int", label: "Max replies" },
-      { key: "auto_chat_max_turns", type: "range", min: 1, max: 100, step: 1, kind: "int", label: "Auto-chat turns (per message)" },
-      { key: "max_context_turns", type: "range", min: 0, max: 500, step: 1, kind: "int", label: "Context turns" },
-      { key: "persona_name_mentions", type: "toggle", label: "Name mentions" },
+      {
+        key: "max_persona_replies",
+        type: "range",
+        min: 1,
+        max: 5,
+        step: 1,
+        kind: "int",
+        label: "Max replies",
+        tip: "How many characters may answer one of your messages. The router decides who, in which order.",
+      },
+      {
+        key: "auto_chat_max_turns",
+        type: "range",
+        min: 1,
+        max: 100,
+        step: 1,
+        kind: "int",
+        label: "Auto-chat turns (per message)",
+        tip: "In auto-chat rooms the characters keep talking among themselves after your message. This is the cap of extra turns per message (the room stops when it is reached or you press stop).",
+        tipLink: ".room-auto",
+      },
+      {
+        key: "max_context_turns",
+        type: "range",
+        min: 0,
+        max: 500,
+        step: 1,
+        kind: "int",
+        label: "Context turns",
+        tip: "How many recent turns of the room are sent to the LLM as context. Higher = more continuity, slower and more VRAM. 0 = every message starts from scratch.",
+      },
+      {
+        key: "persona_name_mentions",
+        type: "toggle",
+        label: "Name mentions",
+        tip: "Only used when “Who answers” is the LLM router: if your message names exactly one character (e.g. “Aria, …”), that character replies directly, skipping the router call. Two or more names (or none) go to the router as usual.",
+      },
     ],
   },
   {
@@ -59,15 +117,75 @@ const TTS_GROUPS = [
     group: "TTS",
     items: [
       { key: "omnivoice_dir", type: "text", label: "OmniVoice repo path (empty = sibling ..\\OmniVoice)", placeholder: "empty = ..\\OmniVoice" },
-      { key: "tts_mode", type: "select", options: ["sentences", "full"], label: "Audio mode (per sentence / full block)" },
-      { key: "tts_num_steps", type: "range", min: 1, max: 100, step: 1, kind: "int", label: "Steps" },
-      { key: "tts_guidance_scale", type: "range", min: 0.1, max: 3, step: 0.1, kind: "float", label: "Guidance" },
+      {
+        key: "tts_mode",
+        type: "select",
+        options: ["sentences", "full"],
+        label: "Audio mode (per sentence / full block)",
+        tip: "sentences: each sentence is synthesized while the reply is still being written (lowest latency). full: waits for the whole reply and synthesizes it in blocks (more natural phrasing, starts later).",
+      },
+      {
+        key: "tts_num_steps",
+        type: "range",
+        min: 1,
+        max: 100,
+        step: 1,
+        kind: "int",
+        label: "Steps",
+        tip: "OmniVoice diffusion steps: more steps = better voice quality, slower synthesis.",
+      },
+      {
+        key: "tts_guidance_scale",
+        type: "range",
+        min: 0.1,
+        max: 3,
+        step: 0.1,
+        kind: "float",
+        label: "Guidance",
+        tip: "How strongly the generated voice follows the reference voice / voice design: higher = more faithful to the reference, lower = freer.",
+      },
       { key: "tts_speed", type: "range", min: 0.5, max: 2, step: 0.05, kind: "float", label: "Speed" },
       { key: "tts_language", type: "select", inline: true, label: "Language (auto = detect per persona)" },
-      { key: "tts_seed", type: "number", min: 0, max: 4294967295, label: "Seed", placeholder: "empty = random", nullable: true },
-      { key: "tts_sentence_timeout", type: "range", min: 5, max: 300, step: 1, kind: "int", label: "Timeout", suffix: " s" },
-      { key: "silence_ms", type: "range", min: 0, max: 1000, step: 10, kind: "int", label: "Silence", suffix: " ms" },
-      { key: "tts_alignment", type: "select", inline: true, options: ["off", "cpu", "gpu"], label: "Word highlight (karaoke)" },
+      {
+        key: "tts_seed",
+        type: "number",
+        min: 0,
+        max: 4294967295,
+        label: "Seed",
+        placeholder: "empty = random",
+        nullable: true,
+        tip: "Same seed + same text = exactly the same audio (useful to reproduce a result you liked). Empty = random every time.",
+      },
+      {
+        key: "tts_sentence_timeout",
+        type: "range",
+        min: 5,
+        max: 300,
+        step: 1,
+        kind: "int",
+        label: "Timeout",
+        suffix: " s",
+        tip: "Max seconds allowed to synthesize one sentence. If it takes longer the sentence is aborted and the rest of the reply keeps going. Raise it on slow hardware.",
+      },
+      {
+        key: "silence_ms",
+        type: "range",
+        min: 0,
+        max: 1000,
+        step: 10,
+        kind: "int",
+        label: "Silence",
+        suffix: " ms",
+        tip: "Pause inserted between sentences while the character speaks.",
+      },
+      {
+        key: "tts_alignment",
+        type: "select",
+        inline: true,
+        options: ["off", "cpu", "gpu"],
+        label: "Word highlight (karaoke)",
+        tip: "Highlights the word being spoken. gpu = lowest latency (uses VRAM), cpu = slower, off = disabled. Applies when the TTS server is (re)started.",
+      },
     ],
   },
   {
@@ -90,7 +208,13 @@ const TTS_GROUPS = [
   {
     group: "ASR",
     items: [
-      { key: "asr_model", type: "select", options: ["tiny", "base", "small", "medium", "large-v3"], label: "Whisper model" },
+      {
+        key: "asr_model",
+        type: "select",
+        options: ["tiny", "base", "small", "medium", "large-v3"],
+        label: "Whisper model",
+        tip: "ASR model used to transcribe your microphone and the .wav samples of new characters: bigger = more accurate, slower and heavier.",
+      },
       { key: "asr_device", type: "select", options: ["auto", "cuda", "cpu"], label: "Device" },
       { key: "asr_timeout", type: "range", min: 10, max: 600, step: 5, kind: "int", label: "Timeout", suffix: " s" },
     ],
@@ -98,7 +222,12 @@ const TTS_GROUPS = [
   {
     group: "VRAM",
     items: [
-      { key: "tts_int8", type: "toggle", label: "INT8 (less VRAM, same quality)" },
+      {
+        key: "tts_int8",
+        type: "toggle",
+        label: "INT8 (less VRAM, same quality)",
+        tip: "Runs the OmniVoice model in 8-bit: about half the VRAM with negligible quality loss. Enable it if the TTS server does not fit next to your LLM. Applies when the TTS server is (re)started.",
+      },
     ],
   },
   {
@@ -263,12 +392,12 @@ function buildInstructField(f) {
 
 function buildField(f) {
   if (f.type === "instruct") return buildInstructField(f);
-  let wrap, input, readout = null;
+  let wrap, input, readout = null, label = null;
 
   if (f.type === "range") {
     wrap = document.createElement("div");
     wrap.className = "slider-r";
-    const label = document.createElement("label");
+    label = document.createElement("label");
     label.textContent = f.label;
     input = document.createElement("input");
     input.type = "range";
@@ -280,7 +409,7 @@ function buildField(f) {
   } else if (f.type === "toggle") {
     wrap = document.createElement("div");
     wrap.className = "toggle-r";
-    const label = document.createElement("label");
+    label = document.createElement("label");
     label.textContent = f.label;
     input = document.createElement("button");
     input.type = "button";
@@ -290,7 +419,7 @@ function buildField(f) {
   } else if (f.type === "select") {
     wrap = document.createElement("div");
     wrap.className = f.inline ? "cfg-field cfg-field-inline" : "cfg-field";
-    const label = document.createElement("label");
+    label = document.createElement("label");
     label.textContent = f.label;
     input = document.createElement("select");
     for (const opt of f.options || []) {
@@ -303,7 +432,7 @@ function buildField(f) {
   } else {
     wrap = document.createElement("div");
     wrap.className = "cfg-field";
-    const label = document.createElement("label");
+    label = document.createElement("label");
     label.textContent = f.label;
     if (f.type === "textarea") {
       input = document.createElement("textarea");
@@ -321,6 +450,22 @@ function buildField(f) {
     wrap.append(label, input);
   }
 
+  if (f.tip && label) label.title = f.tip;
+  // tipLink: mientras aparece el tooltip del label, parpadean los elementos
+  // relacionados (delay ~900ms para sincronizarse con el tooltip nativo)
+  if (f.tipLink && label) {
+    let t = null;
+    label.addEventListener("mouseenter", () => {
+      t = setTimeout(
+        () => document.querySelectorAll(f.tipLink).forEach((n) => n.classList.add("tip-link-pulse")),
+        900
+      );
+    });
+    label.addEventListener("mouseleave", () => {
+      clearTimeout(t);
+      document.querySelectorAll(f.tipLink).forEach((n) => n.classList.remove("tip-link-pulse"));
+    });
+  }
   controls[f.key] = { field: f, input, readout };
   if (f.key === "tts_language") refreshTtsLanguageOptions();
   else setControl(f.key, state.config[f.key]);
