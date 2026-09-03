@@ -164,9 +164,10 @@ class TTSDispatcher:
             )
 
     async def pause(self) -> None:
+        # No se cancela la sintesis en vuelo: pausar no pierde audio (la
+        # oracion en curso termina, su chunk se entrega y suena al
+        # reanudar); lo destructivo es stop(), que si cancela.
         self._pause_event.clear()
-        if self._inflight_task is not None and not self._inflight_task.done():
-            self._inflight_task.cancel()
 
     async def resume(self) -> None:
         self._pause_event.set()

@@ -205,7 +205,9 @@ async def test_09_pausa_conserva_cola(make_dispatcher, env):
     assert engine.count == 2
 
 
-async def test_10_pausa_aborta_en_vuelo(make_dispatcher, env):
+async def test_10_pausa_no_pierde_en_vuelo(make_dispatcher, env):
+    # Pausar no pierde audio: la oracion en curso termina y su chunk se
+    # entrega; la siguiente espera en el gate de pausa hasta el resume
     env[1].create(_persona_dict("P1"))
     engine = FakeEngine(delay=0.4)
     d = make_dispatcher(engine)
@@ -218,13 +220,15 @@ async def test_10_pausa_aborta_en_vuelo(make_dispatcher, env):
     assert engine.count == 2
     assert d._in_flight
     await d.pause()
-    await asyncio.sleep(0.05)
-    assert engine.cancelled == 1
-    await d.resume()
     c2 = await asyncio.wait_for(d.wait_audio(), 3.0)
-    assert c2.sentence_id == 2
-    with pytest.raises(TimeoutError):
-        await asyncio.wait_for(d.wait_audio(), 0.5)
+    assert c2.sentence_id == 1
+    await asyncio.sleep(0.15)
+    assert engine.cancelled == 0
+    assert engine.count == 2
+    assert d.audio_empty()
+    await d.resume()
+    c3 = await asyncio.wait_for(d.wait_audio(), 3.0)
+    assert c3.sentence_id == 2
     assert engine.count == 3
 
 
