@@ -21,7 +21,11 @@ from app.services.tts.engine import (
 logger = logging.getLogger(__name__)
 
 HEALTH_POLL_INTERVAL = 0.2
-HEALTH_TIMEOUT = 15.0
+# El arranque frio (imports de torch/omnivoice + init CUDA, peor en una
+# instalacion nueva con Defender escaneando los DLL por primera vez) puede
+# tardar ~45-60 s hasta que uvicorn escucha; con 15 s el health daba timeout
+# y el server quedaba vivo en el fondo aunque la app reportara el fallo.
+HEALTH_TIMEOUT = 90.0
 READY_POLL_INTERVAL = 1.0
 READY_TIMEOUT = 120.0
 CLIENT_TIMEOUT = httpx.Timeout(10.0, connect=10.0)

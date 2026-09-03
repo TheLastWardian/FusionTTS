@@ -420,8 +420,8 @@ async function enableTTS() {
         }
         setChip("off");
       }
-    }, 300000); // backstop: el cold start completo (spawn + health 15s + /load 120s + ready poll)
-    // puede llegar a ~140s; con 120s el watchdog mataba cargas lentas legítimas
+    }, 300000); // backstop: el cold start completo (spawn + health 90s + /load 120s + ready poll)
+    // puede llegar a ~210s; con 120s el watchdog mataba cargas lentas legítimas
   } catch (err) {
     toast(err.message || "Error turning on TTS", "error");
     setChip("error");
