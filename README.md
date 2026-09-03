@@ -13,9 +13,6 @@ No GPU, no install: it is the real UI running in the browser against a simulated
 canned replies, TTS off, nothing persists. A short guided tour runs on load; replay it any
 time from the `?` button in the top bar.
 
-To (re)publish it: push to the repo, then on GitHub → Settings → Pages →
-"Deploy from a branch" → `main` / root.
-
 ## Architecture
 
 ```
