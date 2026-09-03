@@ -1,3 +1,5 @@
+[![Try the demo online](https://img.shields.io/badge/▶_try_the_demo-online-blue?style=for-the-badge)](https://thelastwardian.github.io/FusionTTS/demo/)
+
 # FusionTTS
 
 Multi-persona voice chat driven by a local LLM. Each persona is a character with its own
