@@ -1,0 +1,82 @@
+/* tour.css — tour guiado: velo oscuro, spotlight sobre el elemento y tarjeta con flecha. */
+
+.tour-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: transparent;
+}
+.tour-spot {
+  position: fixed;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(8, 10, 16, 0.68);
+  pointer-events: none;
+  transition: left 0.18s ease, top 0.18s ease, width 0.18s ease, height 0.18s ease;
+}
+.tour-card {
+  position: fixed;
+  width: min(340px, calc(100vw - 24px));
+  background: var(--bg2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  transition: left 0.18s ease, top 0.18s ease;
+}
+.tour-card-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+}
+.tour-card-arrow.at-top {
+  top: -9px;
+  border-bottom: 8px solid var(--bg2);
+}
+.tour-card-arrow.at-bottom {
+  bottom: -9px;
+  border-top: 8px solid var(--bg2);
+}
+.tour-card-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.tour-card-body {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.tour-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.tour-counter {
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.tour-btn {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.tour-btn:hover {
+  border-color: var(--border-strong);
+}
+.tour-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.tour-btn-primary:hover {
+  filter: brightness(1.1);
+}

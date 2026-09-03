@@ -116,8 +116,8 @@ function updateCollapseButtons() {
   const gR = document.getElementById("gutter-right");
   gL.querySelector("i").className = "ti " + (state.layout.leftCollapsed ? "ti-chevrons-right" : "ti-chevrons-left");
   gR.querySelector("i").className = "ti " + (state.layout.rightCollapsed ? "ti-chevrons-left" : "ti-chevrons-right");
-  gL.querySelector("button").title = state.layout.leftCollapsed ? "Expandir panel" : "Colapsar panel";
-  gR.querySelector("button").title = state.layout.rightCollapsed ? "Expandir panel" : "Colapsar panel";
+  gL.querySelector("button").title = state.layout.leftCollapsed ? "Expand panel" : "Collapse panel";
+  gR.querySelector("button").title = state.layout.rightCollapsed ? "Expand panel" : "Collapse panel";
 }
 
 function toggleCollapsed(side) {

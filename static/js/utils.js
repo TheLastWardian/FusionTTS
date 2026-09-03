@@ -35,7 +35,7 @@ export function toast(msg, type = "info") {
   const t = document.createElement("div");
   t.className = "toast toast-" + type;
   t.textContent = msg;
-  t.title = "Click para cerrar";
+  t.title = "Click to dismiss";
   box.appendChild(t);
   requestAnimationFrame(() => t.classList.add("show"));
   let closed = false;

@@ -9,9 +9,11 @@ import { initChat } from "./chat.js";
 import { initTTS } from "./tts.js";
 import { state } from "./state.js";
 import { loadHistory } from "./persistence.js";
+import { initTour } from "./tour.js";
 
 initTheme();
 initLayout();
+initTour(!!window.FTTS_DEMO);
 
 document.getElementById("btn-settings").addEventListener("click", () => {
   if (isNarrow()) openRightDrawer();

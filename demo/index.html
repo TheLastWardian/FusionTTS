@@ -1,14 +1,25 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FusionTTS</title>
-<link rel="stylesheet" href="vendor/tabler/tabler-icons.min.css">
-<link rel="stylesheet" href="css/style.css">
-<link rel="stylesheet" href="css/tour.css">
+<title>FusionTTS — Interactive demo</title>
+<link rel="stylesheet" href="../static/vendor/tabler/tabler-icons.min.css">
+<link rel="stylesheet" href="../static/css/style.css">
+<link rel="stylesheet" href="../static/css/tour.css">
+<link rel="stylesheet" href="demo.css">
+<script>window.FTTS_DEMO = true;</script>
+<script src="mock-api.js"></script>
 </head>
 <body>
+<div class="demo-banner">
+  <span class="demo-badge">Demo</span>
+  <span class="demo-text">
+    Interactive preview — the LLM and TTS are simulated, nothing is saved.
+    <a href="https://github.com/TheLastWardian/FusionTTS" target="_blank" rel="noopener">Get the full app</a>
+  </span>
+  <button id="btn-replay-tour" class="demo-replay" type="button">Replay tour</button>
+</div>
 <div class="app" id="app">
 
   <!-- Topbar -->
@@ -135,9 +146,54 @@
 <div class="drawer-overlay" id="drawer-overlay"></div>
 <div class="toasts" id="toasts"></div>
 <div class="api-banner" id="api-banner">Could not connect to the API</div>
-<script src="js/sse.js"></script>
-<script src="js/audio-queue.js"></script>
-<script src="js/chips-fit.js"></script>
-<script type="module" src="js/app.js"></script>
+<script>
+  document.getElementById("btn-replay-tour").addEventListener("click", () => {
+    if (window.FusionTour) window.FusionTour.start("demo");
+  });
+</script>
+<script>
+  // tutorial de creacion de personajes: caja informativa + voz de muestra
+  // que dispara el flujo real del app (mock) de punta a punta.
+  (function () {
+    "use strict";
+    const panel = document.getElementById("rpanel-personas");
+    function inject() {
+      const drop = panel.querySelector(".drop-zone");
+      if (!drop || drop.classList.contains("busy")) return;
+      if (drop.previousElementSibling && drop.previousElementSibling.classList.contains("demo-create-hint")) return;
+      const box = document.createElement("div");
+      box.className = "demo-create-hint";
+      box.innerHTML =
+        '<div class="dch-title">How character creation works</div>' +
+        "<ol>" +
+        "<li>Drop a <b>.wav</b> voice sample. The name comes from the file: <code>Name.wav</code>, <code>Name_Eng.wav</code> or <code>Name_Latino.wav</code>.</li>" +
+        "<li>The app transcribes it with a local ASR model.</li>" +
+        "<li>If an LLM is loaded, it writes the character sheet on its own — description, system prompt, color and language. You review and edit everything before accepting, or re-generate it.</li>" +
+        "<li>Accept, and the character appears in the sidebar with its cloned voice.</li>" +
+        "</ol>" +
+        '<div class="dch-note">In this demo every step is simulated; nothing leaves your browser.</div>';
+      const btn = document.createElement("button");
+      btn.className = "dch-btn";
+      btn.type = "button";
+      btn.textContent = "Try it with a sample voice";
+      btn.addEventListener("click", () => {
+        const input = panel.querySelector(".drop-zone input[type=file]");
+        if (!input) return;
+        const dt = new DataTransfer();
+        dt.items.add(new File([new Uint8Array(2048)], "Nova.wav", { type: "audio/wav" }));
+        input.files = dt.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      box.appendChild(btn);
+      panel.insertBefore(box, drop);
+    }
+    new MutationObserver(inject).observe(panel, { childList: true });
+    inject();
+  })();
+</script>
+<script src="../static/js/sse.js"></script>
+<script src="../static/js/audio-queue.js"></script>
+<script src="../static/js/chips-fit.js"></script>
+<script type="module" src="../static/js/app.js"></script>
 </body>
 </html>

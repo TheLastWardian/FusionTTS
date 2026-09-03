@@ -5,6 +5,16 @@ system prompt and a cloned voice (zero-shot voice cloning with
 [OmniVoice](https://github.com/k2-fsa/OmniVoice), 600+ languages). The TTS server runs
 **on demand** (top-bar chip): 0 VRAM while it's off.
 
+## Try it online (demo)
+
+No GPU, no install: [try the interactive demo](https://thelastwardian.github.io/FusionTTS/demo/).
+It is the real UI running in the browser against a simulated backend — canned replies,
+TTS off, nothing persists. A short guided tour runs on load; replay it any time from the
+`?` button in the top bar.
+
+To (re)publish it: push to the repo, then on GitHub → Settings → Pages →
+"Deploy from a branch" → `main` / root.
+
 ## Architecture
 
 ```
