@@ -1,5 +1,3 @@
-[![Try the demo online](https://img.shields.io/badge/▶_try_the_demo-online-blue?style=for-the-badge)](https://thelastwardian.github.io/FusionTTS/demo/)
-
 # FusionTTS
 
 Multi-persona voice chat driven by a local LLM. Each persona is a character with its own
@@ -9,10 +7,11 @@ system prompt and a cloned voice (zero-shot voice cloning with
 
 ## Try it online (demo)
 
-No GPU, no install: [try the interactive demo](https://thelastwardian.github.io/FusionTTS/demo/).
-It is the real UI running in the browser against a simulated backend — canned replies,
-TTS off, nothing persists. A short guided tour runs on load; replay it any time from the
-`?` button in the top bar.
+[![Try the demo online](https://img.shields.io/badge/▶_try_the_demo-online-blue?style=for-the-badge)](https://thelastwardian.github.io/FusionTTS/demo/)
+
+No GPU, no install: it is the real UI running in the browser against a simulated backend —
+canned replies, TTS off, nothing persists. A short guided tour runs on load; replay it any
+time from the `?` button in the top bar.
 
 To (re)publish it: push to the repo, then on GitHub → Settings → Pages →
 "Deploy from a branch" → `main` / root.
