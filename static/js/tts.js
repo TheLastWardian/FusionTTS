@@ -18,6 +18,11 @@ let chunksDropped = 0;
 // ctx.currentTime). ctx.suspend() (pausa) congela el clock solo.
 let wordRaf = 0;
 let wordTrack = null; // {item, t0, last}
+// Pausa intencional (botón): si ensureCtx() reanudara el contexto suspendido,
+// la fuente congelada terminaría de sonar con la cola en "paused",
+// currentEnded() sería no-op y current quedaría apuntando a un item muerto:
+// la cola muere para siempre (chunks llegan con botones, nada suena).
+let ttsPaused = false;
 
 function updateChipDebug() {
   const chip = document.getElementById("tts-chip");
@@ -62,7 +67,7 @@ export function ttsReady() {
 
 function ensureCtx() {
   if (ctx) {
-    if (ctx.state === "suspended") ctx.resume();
+    if (ctx.state === "suspended" && !ttsPaused) ctx.resume();
     return ctx;
   }
   ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -168,6 +173,7 @@ function base64ToBytes(b64) {
 
 function stopLocal() {
   console.warn(`[tts] stopLocal: detengo fuente y vacío la cola (pendientes: ${player ? player.pendingCount : 0})`);
+  ttsPaused = false;
   gen++;
   stopWordTrack();
   if (currentSrc) {
@@ -470,9 +476,11 @@ async function onPause() {
     await api(url, { method: "POST" });
     dispatcher.paused = !dispatcher.paused;
     if (dispatcher.paused) {
+      ttsPaused = true;
       if (player) player.pause();
       if (ctx) ctx.suspend();
     } else {
+      ttsPaused = false;
       if (player) player.resume();
       if (ctx) ctx.resume();
     }

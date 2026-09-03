@@ -64,12 +64,17 @@ class TTSDispatcher:
     async def _worker(self) -> None:
         logger.info("tts dispatcher worker arrancado")
         while not self._shutting_down:
-            await self._pause_event.wait()
-            if self._shutting_down:
-                break
             item = await self._work_q.get()
             if item is None:
                 continue
+            # El wait va DESPUÉS del get: si el check fuera solo al inicio del
+            # loop, una pausa mientras el worker descansa en get() dejaría que
+            # la primera oración de la ronda siguiente se sintetice "a
+            # destiempo" y el worker se quedaría bloqueado en el wait con el
+            # resto de la ronda colgado en la caja.
+            await self._pause_event.wait()
+            if self._shutting_down:
+                break
             if self._stopped:
                 self._count_failed(item[0], "stop", notify=False)
                 continue
