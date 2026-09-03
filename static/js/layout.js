@@ -1,6 +1,6 @@
 // layout.js — modos responsive (wide/mid/narrow), gutters arrastrables, colapso y drawers.
 import { state } from "./state.js";
-import { debounce } from "./utils.js";
+import { debounce, uiZoom } from "./utils.js";
 
 const LS_KEY = "ftts_layout";
 const LIMITS = {
@@ -139,7 +139,8 @@ function initGutter(gutter, which) {
 
     const onMove = (ev) => {
       const rect = document.getElementById("app").getBoundingClientRect();
-      const w = which === "left" ? clampLeft(ev.clientX - rect.left) : clampRight(rect.right - ev.clientX);
+      const z = uiZoom();
+      const w = which === "left" ? clampLeft((ev.clientX - rect.left) / z) : clampRight((rect.right - ev.clientX) / z);
       if (which === "left") {
         state.layout.leftCollapsed = false;
         state.layout.left = Math.round(w);
@@ -181,7 +182,7 @@ function initRoomsGutter() {
 
     const onMove = (ev) => {
       const rect = left.getBoundingClientRect();
-      const h = Math.round(rect.bottom - ev.clientY);
+      const h = Math.round((rect.bottom - ev.clientY) / uiZoom());
       state.layout.roomsH = Math.min(rect.height - 130, Math.max(110, h));
       applyWidths();
       persist();

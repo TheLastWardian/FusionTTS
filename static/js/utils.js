@@ -21,6 +21,17 @@ export async function api(path, opts = {}) {
   return body;
 }
 
+// factor de zoom de la UI (body { zoom }): divide coordenadas de pantalla
+// (getBoundingClientRect / clientX) para usarlas en el espacio local de la UI.
+export function uiZoom() {
+  try {
+    const z = parseFloat(getComputedStyle(document.body).zoom);
+    return Number.isFinite(z) && z > 0 ? z : 1;
+  } catch {
+    return 1;
+  }
+}
+
 export function escapeHtml(s) {
   return String(s)
     .replace(/&/g, "&amp;")

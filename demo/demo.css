@@ -58,7 +58,7 @@ body {
   padding-top: 36px;
 }
 .app {
-  height: calc(100vh - 36px);
+  height: calc(100vh / var(--ui-zoom) - 36px);
 }
 
 /* tutorial de creacion de personajes (pestaña "Add persona") */

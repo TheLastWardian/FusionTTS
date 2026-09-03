@@ -2,6 +2,8 @@
 // Modo "app": arranca solo el primer ingreso (flag localStorage), repetible con el boton "?".
 // Modo "demo": arranca solo siempre (lo usa la pagina demo del repo).
 
+import { uiZoom } from "./utils.js";
+
 const SEEN_KEY = "ft.tour.seen";
 
 const APP_STEPS = [
@@ -120,7 +122,9 @@ function position() {
     return;
   }
   target.scrollIntoView({ block: "center", inline: "nearest" });
-  const r = target.getBoundingClientRect();
+  const z = uiZoom();
+  const R = target.getBoundingClientRect();
+  const r = { left: R.left / z, top: R.top / z, width: R.width / z, height: R.height / z, bottom: R.bottom / z };
   const pad = 6;
   tour.spot.style.left = r.left - pad + "px";
   tour.spot.style.top = r.top - pad + "px";
@@ -130,8 +134,8 @@ function position() {
   const c = tour.card;
   const cw = c.offsetWidth;
   const ch = c.offsetHeight;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  const vw = window.innerWidth / z;
+  const vh = window.innerHeight / z;
   const fitsBelow = r.bottom + 14 + ch <= vh - 10;
   const top = fitsBelow ? r.bottom + 14 : Math.max(10, r.top - 14 - ch);
   const cx = r.left + r.width / 2;
