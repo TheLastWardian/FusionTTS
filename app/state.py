@@ -25,14 +25,24 @@ class AppState:
         self.cancel_event = asyncio.Event()
 
     def get_room_store(self, room_name: str) -> RoomStore:
+        # Clave case-insensitive: "test" y "TEST" son la misma room (en
+        # Windows comparten el mismo directorio en disco; dos stores en
+        # memoria sobre el mismo history.json divergirian). El nombre
+        # canónico del yaml define el directorio del store.
         with self._room_stores_lock:
-            store = self._room_stores.get(room_name)
+            key = room_name.lower()
+            store = self._room_stores.get(key)
             if store is None:
-                store = RoomStore(room_name, self.config)
+                name = room_name
+                if self.rooms is not None:
+                    room = self.rooms.get(room_name)
+                    if room is not None:
+                        name = room["name"]
+                store = RoomStore(name, self.config)
                 store.load()
-                self._room_stores[room_name] = store
+                self._room_stores[key] = store
             return store
 
     def drop_room_store(self, room_name: str) -> None:
         with self._room_stores_lock:
-            self._room_stores.pop(room_name, None)
+            self._room_stores.pop(room_name.lower(), None)

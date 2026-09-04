@@ -33,6 +33,8 @@ async def update_room(request: Request, name: str, payload: Room) -> dict:
         return _room_config_store(request).update(name, payload.model_dump())
     except RoomNameReservedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except RoomExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except KeyError:
         raise HTTPException(status_code=404, detail=f"room not found: {name}")
     except ValueError as exc:

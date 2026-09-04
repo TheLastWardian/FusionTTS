@@ -94,6 +94,24 @@ def test_create_room_duplicate_409(client):
     assert "test" in r.json()["detail"]
 
 
+def test_create_room_case_variant_409(client):
+    seed_persona(client, "Jean")
+    body = {"name": "test", "persona_names": ["Jean"], "echo_chamber": False}
+    assert client.post("/api/rooms", json=body).status_code == 201
+    r = client.post(
+        "/api/rooms",
+        json={"name": "TEST", "persona_names": ["Jean"], "echo_chamber": False},
+    )
+    assert r.status_code == 409
+    assert "test" in r.json()["detail"]
+    # el inverso: ya existe "TEST", no entra "test"
+    r = client.post(
+        "/api/rooms",
+        json={"name": "Test", "persona_names": ["Jean"], "echo_chamber": False},
+    )
+    assert r.status_code == 409
+
+
 @pytest.mark.parametrize("reserved", ["main", "default", "Main", "DEFAULT"])
 def test_create_room_reserved_name_409(client, reserved):
     seed_persona(client, "Jean")
@@ -194,6 +212,18 @@ def test_delete_room_clears_session_cache(client):
     assert client.delete("/api/rooms/test").status_code == 200
     r = client.get("/api/session/history", params={"room": "test"})
     assert r.json() == {"room": "test", "messages": [], "summary": None}
+
+
+def test_room_store_cache_case_insensitive(client):
+    seed_persona(client, "Jean")
+    client.post(
+        "/api/rooms",
+        json={"name": "TEST", "persona_names": ["Jean"], "echo_chamber": False},
+    )
+    state = client.app.state.app_state
+    assert state.get_room_store("test") is state.get_room_store("TEST")
+    # el store usa el nombre canónico del yaml para su directorio
+    assert state.get_room_store("test").room_name == "TEST"
 
 
 def test_missing_yaml_creates_empty(tmp_path):

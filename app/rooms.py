@@ -80,46 +80,77 @@ class RoomConfigStore:
         with self._lock:
             return [dict(room) for room in self._rooms]
 
+    # Los nombres de room son identificadores case-insensitive: "test" y
+    # "TEST" serian la misma room (el routing del chat ya los iguala asi),
+    # asi que se prohiben variantes que difieran solo en mayusculas.
+    @staticmethod
+    def _same_name(a: str, b: str) -> bool:
+        return str(a).lower() == str(b).lower()
+
     def get(self, name: str) -> dict | None:
         with self._lock:
             for room in self._rooms:
-                if room.get("name") == name:
+                if self._same_name(room.get("name", ""), name):
                     return dict(room)
             return None
 
     def create(self, room: dict) -> dict:
         validated = self._validate(room)
         with self._lock:
-            if any(r.get("name") == validated["name"] for r in self._rooms):
-                raise RoomExistsError(f"room already exists: {validated['name']}")
+            existing = next(
+                (r for r in self._rooms if self._same_name(r.get("name", ""), validated["name"])),
+                None,
+            )
+            if existing is not None:
+                raise RoomExistsError(
+                    f"room already exists: {existing.get('name')!r} "
+                    "(names are case-insensitive)"
+                )
             self._rooms.append(validated)
             self._persist_locked()
             return dict(validated)
 
     def update(self, name: str, room: dict) -> dict:
         validated = self._validate(room)
-        if validated["name"] != name:
+        if not self._same_name(validated["name"], name):
             raise ValueError(f"room name mismatch: url {name!r} != body {validated['name']!r}")
         with self._lock:
-            for i, r in enumerate(self._rooms):
-                if r.get("name") == name:
-                    self._rooms[i] = validated
-                    break
-            else:
+            index = next(
+                (i for i, r in enumerate(self._rooms) if self._same_name(r.get("name", ""), name)),
+                None,
+            )
+            if index is None:
                 raise KeyError(name)
+            clash = next(
+                (
+                    r
+                    for i, r in enumerate(self._rooms)
+                    if i != index
+                    and self._same_name(r.get("name", ""), validated["name"])
+                ),
+                None,
+            )
+            if clash is not None:
+                raise RoomExistsError(
+                    f"room already exists: {clash.get('name')!r} "
+                    "(names are case-insensitive)"
+                )
+            self._rooms[index] = validated
             self._persist_locked()
             return dict(validated)
 
     def delete(self, name: str) -> None:
         with self._lock:
             index = next(
-                (i for i, r in enumerate(self._rooms) if r.get("name") == name), None
+                (i for i, r in enumerate(self._rooms) if self._same_name(r.get("name", ""), name)),
+                None,
             )
             if index is None:
                 raise KeyError(name)
+            stored_name = self._rooms[index].get("name")
             self._rooms.pop(index)
             self._persist_locked()
-        RoomStore(name, self.config, root=self.chatrooms_root).delete()
+        RoomStore(stored_name, self.config, root=self.chatrooms_root).delete()
 
     def remove_persona(self, persona_name: str) -> bool:
         with self._lock:
